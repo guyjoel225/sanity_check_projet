@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage Health Check Manager (SHCM)</title>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* ==========================================================================
+           1. STYLES GENERAUX & VARIABLES (Thème Sombre Grafana / VMware par défaut)
+           ========================================================================== */
+        :root {
+            --bg-base: #0c0d12;
+            --bg-surface: #141619;
+            --bg-card: #181b1f;
+            --border-color: #2c323a;
+            --text-main: #d8d9da;
+            --text-bright: #56d4e2;
+            --text-muted: #7b818a;
+            --accent: #00c0ff;
+            --accent-hover: #0088cc;
+            
+            --healthy: #32d74b;
+            --warning: #ff9f0a;
+            --critical: #ff453a;
+            
+            --shadow: rgba(0, 0, 0, 0.4);
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        [data-theme="light"] {
+            --bg-base: #f0f2f5;
+            --bg-surface: #ffffff;
+            --bg-card: #f8f9fa;
+            --border-color: #dcdfe4;
+            --text-main: #2f3542;
+            --text-bright: #0070c0;
+            --text-muted: #747d8c;
+            --accent: #0070c0;
+            --accent-hover: #005a9e;
+            --shadow: rgba(0, 0, 0, 0.05);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: var(--transition);
+        }
+
+        /* ==========================================================================
+           2. NAVIGATION & BARRE LATERALE
+           ========================================================================== */
+        aside {
+            width: 280px;
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .brand-container {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .brand-title {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--text-bright);
+            letter-spacing: 0.5px;
+        }
+
+        .brand-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .nav-menu {
+            list-style: none;
+            padding: 20px 0;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .nav-item {
+            padding: 14px 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 500;
+            color: var(--text-main);
+            border-left: 4px solid transparent;
+            transition: var(--transition);
+        }
+
+        .nav-item:hover, .nav-item.active {
+            background-color: rgba(255, 255, 255, 0.03);
+            color: var(--text-bright);
+            border-left-color: var(--accent);
+        }
+
+        [data-theme="light"] .nav-item:hover, [data-theme="light"] .nav-item.active {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+
+        .footer-nav {
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        main {
+            margin-left: 280px;
+            flex-grow: 1;
+            padding: 40px;
+            max-width: calc(100vw - 280px);
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        /* ==========================================================================
+           3. CONTENEURS DE VUES (VIEWS)
+           ========================================================================== */
+        .view-pane {
+            display: none;
+            animation: paneFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .view-pane.active { display: flex; }
+
+        @keyframes paneFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        .card-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+        }
+
+        .card-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text-bright);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ==========================================================================
+           4. TABLEAU DE BORD (DASHBOARD) & KPI HERO
+           ========================================================================== */
+        .dashboard-hero {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+        }
+
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .kpi-metric-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .kpi-score-display {
+            font-size: 3rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .kpi-subtext {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            margin-top: 8px;
+        }
+
+        /* ==========================================================================
+           5. FORMULAIRES ET ENTREES CONTROLEURS
+           ========================================================================== */
+        .grid-inputs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .form-input, select, textarea {
+            background-color: var(--bg-base);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-family: inherit;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .form-input:focus, select:focus, textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(0, 192, 255, 0.15);
+        }
+
+        /* ==========================================================================
+           6. COMPOSANTS CONSTRUCTEURS DYNAMIQUES
+           ========================================================================== */
+        .control-group-box {
+            border-left: 4px solid var(--accent);
+            background-color: rgba(255, 255, 255, 0.01);
+            padding: 15px;
+            border-radius: 0 6px 6px 0;
+            margin-bottom: 15px;
+        }
+
+        .control-group-title {
+            font-weight: 600;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+            color: var(--text-main);
+        }
+
+        .dynamic-control-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 2fr;
+            gap: 12px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        /* ==========================================================================
+           7. ALERTES ET ANOMALIES
+           ========================================================================== */
+        .anomaly-card {
+            border-left: 4px solid var(--critical);
+            background-color: rgba(255, 69, 58, 0.03);
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 0 6px 6px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .anomaly-card.warning {
+            border-left-color: var(--warning);
+            background-color: rgba(255, 159, 10, 0.03);
+        }
+
+        /* ==========================================================================
+           8. BOUTONS ET BADGES
+           ========================================================================== */
+        .btn {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+        }
+
+        .btn:hover {
+            border-color: var(--accent);
+            color: var(--text-bright);
+        }
+
+        .btn-primary {
+            background-color: var(--accent);
+            color: #0c0d12;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #56d4e2;
+            color: #0c0d12;
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .badge-healthy { background: rgba(50, 215, 75, 0.15); color: var(--healthy); }
+        .badge-warning { background: rgba(255, 159, 10, 0.15); color: var(--warning); }
+        .badge-critical { background: rgba(255, 69, 58, 0.15); color: var(--critical); }
+
+        /* ==========================================================================
+           9. RESPONSIVE & MODULE IMPRESSION
+           ========================================================================== */
+        @media (max-width: 1024px) {
+            aside { width: 80px; }
+            aside .brand-title, aside .brand-subtitle, aside .nav-item span { display: none; }
+            main { margin-left: 80px; max-width: calc(100vw - 80px); }
+        }
+
+        @media print {
+            aside, .no-print { display: none !important; }
+            main { margin-left: 0 !important; max-width: 100% !important; padding: 0 !important; }
+            .card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- BARRE LATERALE -->
+    <aside class="no-print">
+        <div class="brand-container">
+            <span class="brand-title">SHCM Portal</span>
+            <span class="brand-subtitle">Audit Multi-Constructeurs</span>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item active" onclick="ui.view('dashboard')">📊 <span>Dashboard Central</span></li>
+            <li class="nav-item" onclick="ui.view('auditor')">🔍 <span>Audit Technique</span></li>
+            <li class="nav-item" onclick="ui.view('anomalies')">⚠️ <span>Anomalies détectées</span></li>
+            <li class="nav-item" onclick="ui.view('history')">📜 <span>Historique (DB)</span></li>
+        </ul>
+        <div class="footer-nav">
+            <button class="btn" style="width:100%" onclick="ui.toggleTheme()">🌓 Thème</button>
+            <button class="btn" style="width:100%" onclick="reports.exportJSON()">📤 Exporter</button>
+            <button class="btn btn-primary" style="width:100%" onclick="ui.triggerImport()">📥 Importer</button>
+            <input type="file" id="file-import-hidden" style="display:none" onchange="reports.importJSON(event)">
+        </div>
+    </aside>
+
+    <!-- ZONE PRINCIPALE -->
+    <main>
+
+        <!-- VIEW 1: DASHBOARD CENTRAL -->
+        <section id="view-dashboard" class="view-pane active">
+            <div class="dashboard-hero">
+                <!-- KPI Gauges -->
+                <div class="card kpi-row">
+                    <div class="kpi-metric-box">
+                        <span class="kpi-score-display" id="dash-score" style="color: var(--healthy)">100%</span>
+                        <div class="kpi-subtext">Score de Santé</div>
+                    </div>
+                    <div class="kpi-metric-box">
+                        <span class="kpi-score-display" id="dash-warning" style="color: var(--warning)">0</span>
+                        <div class="kpi-subtext">Avertissements</div>
+                    </div>
+                    <div class="kpi-metric-box">
+                        <span class="kpi-score-display" id="dash-critical" style="color: var(--critical)">0</span>
+                        <div class="kpi-subtext">Erreurs Critiques</div>
+                    </div>
+                </div>
+
+                <!-- Résumé des informations -->
+                <div class="card" style="display:flex; flex-direction:column; justify-content:center;">
+                    <div class="card-title">⚙️ Informations Cible</div>
+                    <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div><strong style="color:var(--text-bright);">Baie:</strong> <span id="dash-lbl-bay">Dell PowerStore</span></div>
+                        <div><strong style="color:var(--text-bright);">S/N:</strong> <span id="dash-lbl-sn">N/A</span></div>
+                        <div><strong style="color:var(--text-bright);">Datacenter:</strong> <span id="dash-lbl-dc">N/A</span></div>
+                        <div><strong style="color:var(--text-bright);">Date d'Audit:</strong> <span id="dash-lbl-date">--/--/----</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ZONE GRAPHIQUES -->
+            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 25px;">
+                <div class="card">
+                    <div class="card-title">⚖️ Allocation de Capacité</div>
+                    <div style="position:relative; height:240px; margin-top:15px;">
+                        <canvas id="chart-capacity"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">🛡️ Répartition Santé Composants</div>
+                    <div style="position:relative; height:240px; margin-top:15px;">
+                        <canvas id="chart-components"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 2: AUDITEUR TECHNIQUE -->
+        <section id="view-auditor" class="view-pane">
+            <div class="card">
+                <div class="card-header-flex">
+                    <span class="card-title">💡 Métadonnées d'Audit Multi-Constructeurs</span>
+                    <div class="btn-group no-print" style="display:flex; gap:10px;">
+                        <button class="btn btn-primary" onclick="reports.triggerGenerate()">⚡ Lancer Nouveau Contrôle</button>
+                    </div>
+                </div>
+                
+                <div class="grid-inputs">
+                    <div class="form-group">
+                        <label>Constructeur</label>
+                        <select id="select-vendor" onchange="ui.onVendorChange()">
+                            <option value="dell">Dell Technologies</option>
+                            <option value="netapp">NetApp</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Modèle / OS</label>
+                        <select id="select-model">
+                            <!-- Rempli dynamiquement -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Numéro de Série (S/N)</label>
+                        <input type="text" class="form-input" id="meta-serial" value="PS-9800-A">
+                    </div>
+                    <div class="form-group">
+                        <label>Datacenter / Emplacement</label>
+                        <input type="text" class="form-input" id="meta-location" value="DC-ABIDJAN-RACK12">
+                    </div>
+                </div>
+
+                <!-- Volumétrie sur la baie de stockage -->
+                <div class="grid-inputs" style="margin-top:20px; border-top:1px solid var(--border-color); padding-top:20px;">
+                    <div class="form-group">
+                        <label>Capacité Totale (To)</label>
+                        <input type="number" class="form-input" id="capacity-total" value="500" oninput="ui.onCapacityChange()">
+                    </div>
+                    <div class="form-group">
+                        <label>Capacité Utilisée (To)</label>
+                        <input type="number" class="form-input" id="capacity-used" value="350" oninput="ui.onCapacityChange()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- CONTROLES SYSTEMES DE LA BAIE -->
+            <div class="card">
+                <div class="card-title">🔬 Points de contrôle de l'infrastructure</div>
+                <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:20px;">
+                    Les sections ci-dessous s'adaptent dynamiquement à la baie configurée. Ajustez l'état de chaque sous-système.
+                </p>
+                <div id="dynamic-checks-root">
+                    <!-- Généré dynamiquement -->
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW 3: JOURNAL DES ANOMALIES -->
+        <section id="view-anomalies" class="view-pane">
+            <h2>🚨 Journal de Non-Conformité Actuel</h2>
+            <p style="color:var(--text-muted);">Synthèse complète des anomalies extraites automatiquement de la matrice de contrôles.</p>
+            <div id="anomalies-root" style="display:flex; flex-direction:column; gap:15px;">
+                <!-- Rempli dynamiquement -->
+            </div>
+        </section>
+
+        <!-- VIEW 4: HISTORIQUE PERSISTANT INDEXEDDB -->
+        <section id="view-history" class="view-pane">
+            <h2>📜 Historique Local Persistant (IndexedDB)</h2>
+            <div class="card">
+                <div class="card-title">Dépôts d'audits locaux</div>
+                <div style="margin-top:15px;">
+                    <table style="width:100%; border-collapse: collapse; text-align: left;" id="table-history">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-color); height:40px;">
+                                <th>Date</th>
+                                <th>Baie</th>
+                                <th>Numéro de Série (S/N)</th>
+                                <th>Score</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-rows">
+                            <!-- Rempli localement -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ==========================================================================
+       10. MOTEUR LOGIQUE JAVASCRIPT & PERSISTANCE HORS LIGNE
+       ========================================================================== -->
+    <script>
+        
+        // --- 10.1 BASE DE REGLES CONSTRUCTEURS (TEMPLATES) ---
+        const rulesEngine = {
+            dell: {
+                powerscale: {
+                    title: "Dell PowerScale (OneFS)",
+                    categories: {
+                        hardware: ["État du cluster", "Alimentations redondantes", "Température des nodes"],
+                        capacity: ["Espace disques OneFS", "Pools de protection FlexProtect"],
+                        network: ["Interfaces d'agrégation LACP", "Bande passante Inter-Node"]
+                    }
+                },
+                powerstore: {
+                    title: "Dell PowerStore (PowerStoreOS)",
+                    categories: {
+                        hardware: ["État du contrôleur A", "État du contrôleur B", "Modules de batterie"],
+                        capacity: ["Provisionnement logique", "Taux de réduction (DRR)"],
+                        replication: ["Session de réplication asynchrone", "Objectif RPO/RTO"]
+                    }
+                },
+                vmax: {
+                    title: "Dell VMAX / PowerMax",
+                    categories: {
+                        hardware: ["Directors d'I/O", "Moteurs d'alimentation (SPS)"],
+                        capacity: ["Storage Groups", "Pools SRP (Storage Resource Pool)"],
+                        replication: ["Réplication SRDF"]
+                    }
+                }
+            },
+            netapp: {
+                ontap: {
+                    title: "NetApp ONTAP Cluster",
+                    categories: {
+                        hardware: ["Interconnect HA", "Statut disques de spare"],
+                        capacity: ["Agrégats RAID-DP/RAID-TEC", "Volumes logiques WAFL"],
+                        replication: ["Relations SnapMirror"]
+                    }
+                }
+            }
+        };
+
+        // --- 10.2 ETAT DE L'APPLICATION ---
+        const state = {
+            currentAudit: {
+                vendor: 'dell',
+                model: 'powerstore',
+                serial: 'PS-9800-A',
+                location: 'DC-ABIDJAN-RACK12',
+                date: new Date().toISOString().split('T')[0],
+                score: 100,
+                checks: [],
+                capacity: { total: 500, used: 350 }
+            },
+            history: [],
+            charts: {}
+        };
+
+        // --- 10.3 COMPORTEMENT ET RENDER INTERFACE (UI) ---
+        const ui = {
+            init() {
+                this.onVendorChange();
+                this.initCharts();
+                db.init(() => {
+                    db.getAll(items => {
+                        state.history = items;
+                        this.renderHistory();
+                    });
+                });
+            },
+
+            view(targetId) {
+                document.querySelectorAll('.view-pane').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                
+                document.getElementById(`view-${targetId}`).classList.add('active');
+                
+                const matchMenu = Array.from(document.querySelectorAll('.nav-item'))
+                    .find(el => el.onclick.toString().includes(`'${targetId}'`));
+                if (matchMenu) matchMenu.classList.add('active');
+                
+                if (targetId === 'dashboard') {
+                    this.updateDashboardVisuals();
+                }
+            },
+
+            toggleTheme() {
+                const current = document.documentElement.getAttribute('data-theme');
+                document.documentElement.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+            },
+
+            onVendorChange() {
+                const vendor = document.getElementById('select-vendor').value;
+                const modelSelect = document.getElementById('select-model');
+                modelSelect.innerHTML = '';
+                
+                Object.keys(rulesEngine[vendor]).forEach(key => {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.textContent = rulesEngine[vendor][key].title;
+                    modelSelect.appendChild(opt);
+                });
+            },
+
+            onCapacityChange() {
+                state.currentAudit.capacity.total = parseFloat(document.getElementById('capacity-total').value) || 0;
+                state.currentAudit.capacity.used = parseFloat(document.getElementById('capacity-used').value) || 0;
+            },
+
+            triggerImport() {
+                document.getElementById('file-import-hidden').click();
+            },
+
+            initCharts() {
+                // Graphique de Capacité (Barre Empilée)
+                const ctxCap = document.getElementById('chart-capacity').getContext('2d');
+                state.charts.capacity = new Chart(ctxCap, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Données Baie (To)'],
+                        datasets: [
+                            { label: 'Utilisé', data: [350], backgroundColor: '#ff9f0a' },
+                            { label: 'Libre', data: [150], backgroundColor: '#32d74b' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { x: { stacked: true }, y: { stacked: true } }
+                    }
+                });
+
+                // Graphique Composants (Doughnut)
+                const ctxComp = document.getElementById('chart-components').getContext('2d');
+                state.charts.components = new Chart(ctxComp, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Sain', 'Avertissement', 'Critique'],
+                        datasets: [{
+                            data: [100, 0, 0],
+                            backgroundColor: ['#32d74b', '#ff9f0a', '#ff453a'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            },
+
+            updateDashboardVisuals() {
+                // Synchronisation des labels
+                document.getElementById('dash-lbl-bay').textContent = rulesEngine[state.currentAudit.vendor]?.[state.currentAudit.model]?.title || "N/A";
+                document.getElementById('dash-lbl-sn').textContent = state.currentAudit.serial || 'N/A';
+                document.getElementById('dash-lbl-dc').textContent = state.currentAudit.location || 'N/A';
+                document.getElementById('dash-lbl-date').textContent = state.currentAudit.date || new Date().toLocaleDateString('fr-FR');
+
+                // --- 10.3.1 PREMIER CAHIER DES CHARGES : EVALUATION DU STATUT DES COMPOSANTS ---
+                let healthy = 0, warning = 0, critical = 0;
+                state.currentAudit.checks.forEach(c => {
+                    if (c.status === 'healthy') healthy++;
+                    else if (c.status === 'warning') warning++;
+                    else if (c.status === 'critical') critical++;
+                });
+
+                // Le score dépend fidèlement et exclusivement des contrôles d'infrastructure configurés
+                const totalChecks = healthy + warning + critical;
+                let score = 100;
+                if (totalChecks > 0) {
+                    score = Math.round((healthy / totalChecks) * 100);
+                }
+                state.currentAudit.score = score;
+
+                // Affichage du Score Global
+                const scoreBox = document.getElementById('dash-score');
+                scoreBox.textContent = `${score}%`;
+                scoreBox.style.color = score > 80 ? 'var(--healthy)' : (score > 50 ? 'var(--warning)' : 'var(--critical)');
+
+                // Mise à jour des compteurs visuels des composants
+                document.getElementById('dash-warning').textContent = warning;
+                document.getElementById('dash-critical').textContent = critical;
+
+                // Rafraîchissement du doughnut des composants
+                state.charts.components.data.datasets[0].data = [healthy, warning, critical];
+                state.charts.components.update();
+
+                // --- 10.3.2 DEUXIÈME CAHIER DES CHARGES : COLORATION SEUILS DE LA CAPACITÉ ---
+                const totalCap = state.currentAudit.capacity.total;
+                const usedCap = state.currentAudit.capacity.used;
+                const freeCap = Math.max(0, totalCap - usedCap);
+                
+                // Calcul précis du pourcentage d'usage
+                const usagePercent = totalCap > 0 ? (usedCap / totalCap) * 100 : 0;
+                
+                let capacityColor = '#32d74b'; // Vert par défaut (< 80%)
+                
+                if (usagePercent >= 80 && usagePercent < 90) {
+                    capacityColor = '#ff9f0a'; // Jaune (80% à 90%)
+                } else if (usagePercent >= 90) {
+                    capacityColor = '#ff453a'; // Rouge (>= 90% jusqu'à 99%+)
+                }
+
+                // Rafraîchissement graphique de la barre de capacité avec sa couleur dynamique
+                state.charts.capacity.data.datasets[0].data = [usedCap];
+                state.charts.capacity.data.datasets[0].backgroundColor = capacityColor;
+                state.charts.capacity.data.datasets[1].data = [freeCap];
+                state.charts.capacity.update();
+            },
+
+            renderHistory() {
+                const tbody = document.getElementById('history-rows');
+                tbody.innerHTML = '';
+                state.history.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.style.height = "45px";
+                    tr.style.borderBottom = "1px solid var(--border-color)";
+                    tr.innerHTML = `
+                        <td>${item.date}</td>
+                        <td>${item.vendor.toUpperCase()} - ${item.model}</td>
+                        <td>${item.serial}</td>
+                        <td style="font-weight:bold; color:var(--healthy);">${item.score}%</td>
+                        <td>
+                            <button class="btn" style="padding:4px 8px; font-size:0.8rem;" onclick="reports.loadAuditFromHistory('${item.id}')">📂 Ouvrir</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+        };
+
+        // --- 10.4 MOTEUR D'AUDIT COMPOSANTS ---
+        const auditorEngine = {
+            buildMatrix(vendor, model) {
+                const root = document.getElementById('dynamic-checks-root');
+                root.innerHTML = '';
+                state.currentAudit.checks = [];
+
+                const schema = rulesEngine[vendor][model];
+                if (!schema) return;
+
+                Object.keys(schema.categories).forEach(catName => {
+                    const sectionBox = document.createElement('div');
+                    sectionBox.className = 'control-group-box';
+                    sectionBox.innerHTML = `<div class="control-group-title">🛠️ Sous-catégorie : ${catName.toUpperCase()}</div>`;
+                    
+                    schema.categories[catName].forEach((chkLabel, idx) => {
+                        const checkId = `${catName}_${idx}`;
+                        state.currentAudit.checks.push({
+                            id: checkId,
+                            label: chkLabel,
+                            status: 'healthy',
+                            comment: ''
+                        });
+
+                        const row = document.createElement('div');
+                        row.className = 'dynamic-control-row';
+                        row.innerHTML = `
+                            <span style="font-weight:500;">${chkLabel}</span>
+                            <select onchange="auditorEngine.updateCheckStatus('${checkId}', this.value)">
+                                <option value="healthy">🟢 SAIN</option>
+                                <option value="warning">🟡 WARNING</option>
+                                <option value="critical">🔴 CRITIQUE</option>
+                            </select>
+                            <input type="text" class="form-input" style="grid-column: span 2;" placeholder="Note de remédiation..." oninput="auditorEngine.updateCheckComment('${checkId}', this.value)">
+                        `;
+                        sectionBox.appendChild(row);
+                    });
+
+                    root.appendChild(sectionBox);
+                });
+            },
+
+            updateCheckStatus(id, value) {
+                const chk = state.currentAudit.checks.find(c => c.id === id);
+                if (chk) chk.status = value;
+                this.updateAnomaliesList();
+            },
+
+            updateCheckComment(id, value) {
+                const chk = state.currentAudit.checks.find(c => c.id === id);
+                if (chk) chk.comment = value;
+                this.updateAnomaliesList();
+            },
+
+            updateAnomaliesList() {
+                const root = document.getElementById('anomalies-root');
+                root.innerHTML = '';
+
+                state.currentAudit.checks.forEach(c => {
+                    if (c.status !== 'healthy') {
+                        const card = document.createElement('div');
+                        card.className = `anomaly-card ${c.status}`;
+                        card.innerHTML = `
+                            <div>
+                                <strong style="text-transform: uppercase;">[${c.status}]</strong> ${c.label}
+                                <div style="font-size:0.85rem; margin-top:4px; color:var(--text-muted);">Action corrective requise : ${c.comment || 'Non renseignée'}</div>
+                            </div>
+                            <span class="status-badge badge-${c.status}">${c.status}</span>
+                        `;
+                        root.appendChild(card);
+                    }
+                });
+            }
+        };
+
+        // --- 10.5 EXPORT, IMPORT & GENERATEURS DE RAPPORTS ---
+        const reports = {
+            triggerGenerate() {
+                state.currentAudit.vendor = document.getElementById('select-vendor').value;
+                state.currentAudit.model = document.getElementById('select-model').value;
+                state.currentAudit.serial = document.getElementById('meta-serial').value;
+                state.currentAudit.location = document.getElementById('meta-location').value;
+                state.currentAudit.date = new Date().toISOString().split('T')[0];
+                ui.onCapacityChange();
+
+                auditorEngine.buildMatrix(state.currentAudit.vendor, state.currentAudit.model);
+                ui.updateDashboardVisuals();
+                
+                const savePayload = {
+                    id: `${state.currentAudit.serial}_${Date.now()}`,
+                    ...state.currentAudit
+                };
+                db.save(savePayload, () => {
+                    db.getAll(items => {
+                        state.history = items;
+                        ui.renderHistory();
+                    });
+                });
+                
+                alert("Nouveau cadre d'audit calculé et persisté en base de données locale.");
+            },
+
+            loadAuditFromHistory(id) {
+                const found = state.history.find(item => item.id === id);
+                if (found) {
+                    state.currentAudit = found;
+                    document.getElementById('select-vendor').value = found.vendor;
+                    ui.onVendorChange();
+                    document.getElementById('select-model').value = found.model;
+                    document.getElementById('meta-serial').value = found.serial;
+                    document.getElementById('meta-location').value = found.location;
+                    
+                    if(found.capacity) {
+                        document.getElementById('capacity-total').value = found.capacity.total || 500;
+                        document.getElementById('capacity-used').value = found.capacity.used || 350;
+                    }
+
+                    auditorEngine.buildMatrix(found.vendor, found.model);
+                    
+                    found.checks.forEach(savedCheck => {
+                        auditorEngine.updateCheckStatus(savedCheck.id, savedCheck.status);
+                        auditorEngine.updateCheckComment(savedCheck.id, savedCheck.comment);
+                    });
+
+                    ui.updateDashboardVisuals();
+                    ui.view('dashboard');
+                }
+            },
+
+            exportJSON() {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.currentAudit, null, 2));
+                const dlAnchor = document.createElement('a');
+                const name = `SHCM_${state.currentAudit.vendor}_${state.currentAudit.serial}_${state.currentAudit.date}.json`;
+                dlAnchor.setAttribute("href", dataStr);
+                dlAnchor.setAttribute("download", name);
+                document.body.appendChild(dlAnchor);
+                dlAnchor.click();
+                dlAnchor.remove();
+            },
+
+            importJSON(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const parsed = JSON.parse(e.target.result);
+                        if (parsed.vendor && parsed.checks) {
+                            state.currentAudit = parsed;
+                            alert("Rapport importé avec succès !");
+                            ui.view('dashboard');
+                        }
+                    } catch (err) {
+                        alert("Format de fichier d'audit non reconnu.");
+                    }
+                };
+                reader.readAsText(file);
+            }
+        };
+
+        // --- 10.6 CONFIGURATION INDEXEDDB (HORS LIGNE LOCAL) ---
+        const db = {
+            instance: null,
+            init(callback) {
+                const request = indexedDB.open("SHCM_Database", 1);
+                request.onupgradeneeded = (e) => {
+                    const d = e.target.result;
+                    if (!d.objectStoreNames.contains("audits")) {
+                        d.createObjectStore("audits", { keyPath: "id" });
+                    }
+                };
+                request.onsuccess = (e) => {
+                    this.instance = e.target.result;
+                    if (callback) callback();
+                };
+            },
+            save(item, callback) {
+                const tx = this.instance.transaction("audits", "readwrite");
+                const store = tx.objectStore("audits");
+                store.put(item);
+                tx.oncomplete = () => { if (callback) callback(); };
+            },
+            getAll(callback) {
+                const tx = this.instance.transaction("audits", "readonly");
+                const store = tx.objectStore("audits");
+                const req = store.getAll();
+                req.onsuccess = () => { if (callback) callback(req.result); };
+            }
+        };
+
+        window.onload = () => {
+            ui.init();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage Health Check Manager (SHCM) - Pro Ultimate</title>
+    
+    <!-- Chart.js (Graphiques dynamiques) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SortableJS (Drag & Drop des blocs de contrôle) -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+    <style>
+        /* ==========================================================================
+           1. THÈME & DESIGN SYSTEM (Moderne Dark/Cyberpunk)
+           ========================================================================== */
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #22c55e;
+            --accent-orange: #eab308;
+            --accent-red: #ef4444;
+            --border-color: #475569;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --header-height: 70px;
+            --sidebar-width: 320px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: var(--font-stack);
+            line-height: 1.5;
+            padding-top: var(--header-height);
+        }
+
+        /* ==========================================================================
+           2. EN-TÊTE FIXE (HEADER)
+           ========================================================================== */
+        header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--header-height);
+            background-color: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 2px solid var(--border-color);
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .logo-area h1 {
+            font-size: 1.3rem;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-area span {
+            font-size: 0.75rem;
+            background: var(--border-color);
+            color: var(--text-main);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .global-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* Boutons */
+        .btn {
+            background-color: var(--bg-tertiary);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 0.9rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background-color: var(--border-color);
+            border-color: var(--accent-blue);
+        }
+
+        .btn-primary { background-color: var(--accent-blue); color: #000; border: none; }
+        .btn-primary:hover { background-color: #7dd3fc; }
+        .btn-success { background-color: #16a34a; border: none; color: #fff; }
+        .btn-success:hover { background-color: #15803d; }
+        .btn-danger { background-color: var(--accent-red); border: none; color: #fff; }
+        .btn-danger:hover { background-color: #f87171; }
+
+        .autosave-badge {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: rgba(255,255,255,0.05);
+            padding: 4px 8px;
+            border-radius: 50px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* ==========================================================================
+           3. LAYOUT SIDEBAR + CONTENU
+           ========================================================================== */
+        .app-container {
+            display: flex;
+            min-height: calc(100vh - var(--header-height));
+        }
+
+        /* SIDEBAR FIXE */
+        aside {
+            width: var(--sidebar-width);
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            position: fixed;
+            top: var(--header-height);
+            bottom: 0;
+            left: 0;
+            overflow-y: auto;
+            z-index: 900;
+        }
+
+        aside h2 {
+            font-size: 1.1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            color: var(--accent-blue);
+        }
+
+        /* TEMPLATES DANS LA SIDEBAR */
+        .template-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .template-sidebar-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            cursor: pointer;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .template-sidebar-card:hover {
+            border-color: var(--accent-blue);
+            background-color: rgba(56, 189, 248, 0.05);
+        }
+
+        .template-sidebar-card h3 {
+            font-size: 0.95rem;
+            margin-bottom: 2px;
+        }
+
+        .template-sidebar-card p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* HISTORIQUE LOCAL DANS LA SIDEBAR */
+        .history-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .history-item {
+            background-color: var(--bg-primary);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            transition: border-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .history-item:hover, .history-item.active {
+            border-color: var(--accent-blue);
+        }
+
+        .history-item-content {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .history-item .item-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .history-item .item-meta {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+        }
+
+        /* CONTENU PRINCIPAL */
+        main {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            padding: 2rem;
+            max-width: 1200px;
+            width: calc(100% - var(--sidebar-width));
+        }
+
+        @media (max-width: 950px) {
+            aside {
+                position: static;
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+            }
+            .app-container {
+                flex-direction: column;
+            }
+            main {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+        }
+
+        /* ==========================================================================
+           4. ESPACES DE TRAVAIL & COMPOSANTS
+           ========================================================================== */
+        .report-workspace, .comparison-workspace, .consolidated-workspace {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 2rem;
+            display: none;
+            margin-bottom: 2rem;
+        }
+
+        .workspace-welcome {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 300px;
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .report-header-fields {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 2rem;
+            background-color: var(--bg-primary);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .field-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .field-group input, .field-group select, .field-group textarea {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .field-group input:focus, .field-group select:focus {
+            border-color: var(--accent-blue);
+        }
+
+        /* Curseur de Capacité */
+        .capacity-slider-box {
+            grid-column: 1 / -1;
+            background: rgba(56, 189, 248, 0.05);
+            border: 1px dashed var(--accent-blue);
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .slider-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 8px;
+        }
+
+        .slider-wrapper input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent-blue);
+            cursor: pointer;
+        }
+
+        /* KPI & CHARTS */
+        .dashboard-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-score-card {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .kpi-score-circle {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            border: 8px solid var(--accent-green);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin: 10px 0;
+            transition: border-color 0.3s ease;
+        }
+
+        .kpi-charts-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 160px;
+            width: 100%;
+        }
+
+        /* BLOCS & TABLES DE CONTRÔLE */
+        .blocks-area {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .block-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            position: relative;
+        }
+
+        .block-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .block-card-title {
+            font-weight: bold;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .check-table, .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .check-table th, .check-table td, .compare-table th, .compare-table td {
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        .check-table th, .compare-table th {
+            background-color: var(--bg-secondary);
+        }
+
+        .editable-item-input {
+            background: transparent;
+            border: 1px dashed var(--border-color);
+            color: var(--text-main);
+            padding: 4px 8px;
+            font-weight: bold;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        .status-select {
+            padding: 4px;
+            border-radius: 4px;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            font-weight: bold;
+        }
+
+        .status-select.ok { border-color: var(--accent-green); color: var(--accent-green); }
+        .status-select.warn { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .status-select.crit { border-color: var(--accent-red); color: var(--accent-red); }
+
+        .btn-inline-del {
+            background: transparent;
+            border: none;
+            color: var(--accent-red);
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .block-toolbar {
+            background-color: var(--bg-primary);
+            border: 1px dashed var(--border-color);
+            padding: 1rem;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .anomalies-section, .synthesis-section {
+            margin-top: 2rem;
+            background-color: #271616;
+            border: 1px solid var(--accent-red);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .synthesis-section {
+            background-color: #16243a;
+            border-color: var(--accent-blue);
+        }
+
+        .anomaly-item {
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .anomaly-item.warn { background-color: rgba(234, 179, 8, 0.15); border: 1px solid var(--accent-orange); }
+        .anomaly-item.crit { background-color: rgba(239, 68, 68, 0.15); border: 1px solid var(--accent-red); }
+
+        /* CARDS SYNTHESE MULTI-EQUIPEMENT */
+        .consolidated-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 2rem;
+        }
+
+        .consolidated-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .consolidated-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        /* PRINT CONFIG */
+        @media print {
+            body, html {
+                background-color: #0f172a !important;
+                color: #f8fafc !important;
+                padding-top: 0 !important;
+            }
+            header, aside, .block-toolbar, .btn-inline-del, .capacity-slider-box {
+                display: none !important;
+            }
+            main {
+                margin-left: 0 !important;
+                width: 100% !important;
+                padding: 0 !important;
+            }
+            .report-workspace, .comparison-workspace, .consolidated-workspace {
+                display: block !important;
+                border: none !important;
+                padding: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- EN-TÊTE FIXE -->
+    <header>
+        <div class="logo-area">
+            <h1>Storage Health Check Manager <span>v2.1 Pro</span></h1>
+            <span id="autosaveStatus" class="autosave-badge">Sauvegardé</span>
+        </div>
+        <div class="global-actions">
+            <!-- Sauvegarde/Restauration Physique JSON -->
+            <button class="btn" onclick="exportDatabaseJSON()" title="Exporter toute la base de données en JSON">📥 Exporter DB</button>
+            <button class="btn" onclick="triggerImport()" title="Importer un fichier JSON d'historique">📤 Importer DB</button>
+            <input type="file" id="importFile" style="display:none;" onchange="importDatabaseJSON(this)" accept=".json">
+            
+            <button class="btn" onclick="compareSelectedReports()">📊 Comparer Sélection</button>
+            <button class="btn btn-success" onclick="generateConsolidatedReport()">🔗 Rapport Global</button>
+            <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimer</button>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <!-- SIDEBAR DE CONTRÔLE -->
+        <aside>
+            <!-- 1. Initialisation diagnostic -->
+            <div>
+                <h2>Nouveau Diagnostic</h2>
+                <div class="template-list" style="margin-top: 10px;">
+                    <div class="template-sidebar-card" onclick="initNewReport('PowerStore')">
+                        <h3>Dell PowerStore</h3>
+                        <p>Appliance, CPU, Volumes & Réplication</p>
+                    </div>
+                    <div class="template-sidebar-card" onclick="initNewReport('PowerScale')">
+                        <h3>Dell PowerScale</h3>
+                        <p>OneFS, Clusters, Pools & FlexProtect</p>
+                    </div>
+                    <div class="template-sidebar-card" onclick="initNewReport('VMAX')">
+                        <h3>VMAX / PowerMax</h3>
+                        <p>Symmetrix, Directors, Pools & SRDF</p>
+                    </div>
+                    <div class="template-sidebar-card" onclick="initNewReport('NetApp')">
+                        <h3>NetApp ONTAP</h3>
+                        <p>Nodes, Aggregates, Volumes & SnapMirror</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Historique persistant -->
+            <div style="flex: 1; display: flex; flex-direction: column; min-height: 250px;">
+                <h2>Historique Local</h2>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin: 5px 0 10px 0;">Cochez pour comparer.</p>
+                <div style="flex: 1; overflow-y: auto;">
+                    <ul id="historyList" class="history-list"></ul>
+                </div>
+            </div>
+
+            <!-- Bouton Réinitialisation -->
+            <div>
+                <button class="btn btn-danger" style="width: 100%; justify-content: center;" onclick="clearDatabase()">Réinitialiser DB</button>
+            </div>
+        </aside>
+
+        <!-- ZONE DE TRAVAIL CENTRALE -->
+        <main>
+            <!-- Écran d'accueil neutre -->
+            <div id="welcomeScreen" class="workspace-welcome">
+                <h2>🛠️ Storage Health Check Manager</h2>
+                <p style="margin-top: 10px;">Sélectionnez une plateforme de stockage dans la sidebar de gauche pour créer un rapport, ou ouvrez un rapport existant depuis l'historique.</p>
+            </div>
+
+            <!-- Workspace : Rapport Unique -->
+            <section id="reportWorkspace" class="report-workspace">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px;">
+                    <h2 id="reportTitle" style="color: var(--accent-blue);">Diagnostic</h2>
+                    <button class="btn btn-primary" onclick="saveActiveReport()">💾 Enregistrer le Rapport</button>
+                </div>
+
+                <div class="report-header-fields">
+                    <div class="field-group">
+                        <label>Date du Contrôle</label>
+                        <input type="date" id="repDate" onchange="updateMetadata('date', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Technicien Référent</label>
+                        <input type="text" id="repTech" oninput="updateMetadata('tech', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Nom de l'Équipement</label>
+                        <input type="text" id="repHost" oninput="updateMetadata('host', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Modèle Exact</label>
+                        <input type="text" id="repModel" oninput="updateMetadata('model', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Numéro de Série (S/N)</label>
+                        <input type="text" id="repSN" oninput="updateMetadata('sn', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Adresse IP Management</label>
+                        <input type="text" id="repIP" oninput="updateMetadata('ip', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Datacenter / Localisation</label>
+                        <input type="text" id="repDC" oninput="updateMetadata('dc', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Version Firmware / OS</label>
+                        <input type="text" id="repFirmware" oninput="updateMetadata('firmware', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Capacité Stockage Totale (To)</label>
+                        <input type="number" id="repCapTotal" value="100" min="1" oninput="syncCapacityInputs('total', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Capacité Stockage Utilisée (To)</label>
+                        <input type="number" id="repCapUsed" value="45" min="0" oninput="syncCapacityInputs('used', this.value)">
+                    </div>
+
+                    <!-- Curseur de réglage rapide -->
+                    <div class="capacity-slider-box">
+                        <label style="font-size: 0.8rem; font-weight: bold; color: var(--accent-blue);">🎛️ Ajustement Rapide de l'Espace Disque Utilisé (%)</label>
+                        <div class="slider-wrapper">
+                            <span style="font-size: 0.8rem; color: var(--text-muted);">0%</span>
+                            <input type="range" id="repCapSlider" min="0" max="100" value="45" oninput="syncCapacityInputs('slider', this.value)">
+                            <span id="sliderValLabel" style="font-weight: bold; color: var(--accent-orange);">45%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dashboard KPI -->
+                <div class="dashboard-row">
+                    <div class="kpi-score-card">
+                        <h3>Score de Santé</h3>
+                        <div id="kpiScore" class="kpi-score-circle">100%</div>
+                        <p id="kpiLabel" style="font-weight: bold; color: var(--accent-green);">Excellent</p>
+                    </div>
+                    <div class="kpi-charts-card">
+                        <div>
+                            <h4 style="font-size: 0.8rem; margin-bottom: 5px; text-align: center;">Répartition Anomalies</h4>
+                            <div class="chart-container">
+                                <canvas id="chartAnomalies"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 0.8rem; margin-bottom: 5px; text-align: center;">Capacité Utilisée</h4>
+                            <div class="chart-container">
+                                <canvas id="chartCapacity"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtre d'Affichage Dynamique -->
+                <div style="margin: 1.5rem 0; display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">🔍 Filtrer les contrôles :</span>
+                    <button class="btn" onclick="filterChecks('ALL')">Tous</button>
+                    <button class="btn" style="color: var(--accent-orange);" onclick="filterChecks('WARN')">Warnings</button>
+                    <button class="btn" style="color: var(--accent-red);" onclick="filterChecks('CRIT')">Critiques</button>
+                </div>
+
+                <h3>Points de Contrôle d'Infrastructure</h3>
+                <div id="blocksArea" class="blocks-area"></div>
+
+                <div class="block-toolbar">
+                    <button class="btn" onclick="addCustomBlock('Tableau')">➕ Ajouter un Tableau</button>
+                    <button class="btn" onclick="addCustomBlock('Note')">➕ Ajouter Observations</button>
+                </div>
+
+                <div class="anomalies-section">
+                    <h3>⚠️ Anomalies Détectées (Automatique)</h3>
+                    <ul id="anomaliesList" class="anomalies-list"></ul>
+                </div>
+            </section>
+
+            <!-- Workspace : Comparateur -->
+            <section id="comparisonWorkspace" class="comparison-workspace">
+                <h2 style="color: var(--accent-blue); margin-bottom: 1.5rem;">📊 Comparaison Structurée des Diagnostics</h2>
+                <div style="overflow-x: auto;">
+                    <table class="compare-table" id="compareTable"></table>
+                </div>
+                <div class="synthesis-section">
+                    <h3>🔍 Synthèse Comparative Automatique</h3>
+                    <div id="compareSynthesisText" style="margin-top: 10px; font-size: 0.95rem; line-height: 1.6;"></div>
+                </div>
+            </section>
+
+            <!-- Workspace : Rapport Global Consolidé -->
+            <section id="consolidatedWorkspace" class="consolidated-workspace">
+                <h2 style="color: var(--accent-blue); margin-bottom: 0.5rem;">🔗 Rapport Global Consolidé (Infrastructure Multi-Éléments)</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Synthèse combinée et état analytique de santé global de vos systèmes de stockage.</p>
+                
+                <div class="report-header-fields">
+                    <div class="field-group">
+                        <label>Date de Consolidation</label>
+                        <input type="text" id="consolidatedDate" readonly style="background: rgba(255,255,255,0.05)">
+                    </div>
+                    <div class="field-group">
+                        <label>Nombre d'Éléments Actifs</label>
+                        <input type="text" id="consolidatedCount" readonly style="background: rgba(255,255,255,0.05)">
+                    </div>
+                    <div class="field-group">
+                        <label>Capacité Cumulée Totale (To)</label>
+                        <input type="text" id="consolidatedCapTotal" readonly style="background: rgba(255,255,255,0.05)">
+                    </div>
+                    <div class="field-group">
+                        <label>Capacité Cumulée Utilisée (To)</label>
+                        <input type="text" id="consolidatedCapUsed" readonly style="background: rgba(255,255,255,0.05)">
+                    </div>
+                </div>
+
+                <!-- GRILLE DE SYNTHÈSE AVEC GRAPHQUES INDIVIDUELS -->
+                <h3 style="margin-bottom: 1rem;">États de Santé Individuels</h3>
+                <div class="consolidated-grid" id="consolidatedVisualGrid"></div>
+
+                <div class="synthesis-section" style="background-color: #121c2c;">
+                    <h3>🛠️ Plan d'Action & Consolidation des Remédiations</h3>
+                    <div id="consolidatedActions" style="margin-top: 10px; font-size: 0.95rem; line-height: 1.6;"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let db;
+        const DB_NAME = "SHCM_Database_v2_1";
+        const STORE_NAME = "reports";
+        let activeReport = null;
+        let anomalyChartInstance = null;
+        let capacityChartInstance = null;
+        let activeFilter = 'ALL';
+        let consolidatedCharts = {};
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 2);
+                request.onerror = event => reject("Erreur IndexedDB : " + event.target.errorCode);
+                request.onsuccess = event => { db = event.target.result; resolve(db); };
+                request.onupgradeneeded = event => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains(STORE_NAME)) {
+                        database.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
+                    }
+                };
+            });
+        }
+
+        const TEMPLATES = {
+            PowerStore: [
+                { title: "Châssis & Appliance", type: "table", checks: [{ item: "Santé Générale Appliance", status: "OK", comment: "LEDs vertes" }, { item: "PowerStoreOS Version", status: "OK", comment: "À jour" }] },
+                { title: "Processeurs & Mémoire", type: "table", checks: [{ item: "Controller A (CPU/RAM)", status: "OK", comment: "Charge < 45%" }, { item: "Controller B (CPU/RAM)", status: "OK", comment: "Charge < 45%" }] }
+            ],
+            PowerScale: [
+                { title: "Cluster OneFS", type: "table", checks: [{ item: "État global OneFS", status: "OK", comment: "Aucun défaut" }] }
+            ],
+            VMAX: [
+                { title: "Symmetrix Engine", type: "table", checks: [{ item: "Version Microcode", status: "OK", comment: "Conforme" }] }
+            ],
+            NetApp: [
+                { title: "Cluster ONTAP", type: "table", checks: [{ item: "État du Cluster Interconnect", status: "OK", comment: "LIFs UP" }] }
+            ]
+        };
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            try { 
+                await initDB(); 
+                loadReportsHistory(); 
+                initDragAndDrop();
+                setInterval(autosaveActiveReport, 30000); 
+            } catch (err) { 
+                console.error(err); 
+            }
+        });
+
+        function initNewReport(constructor) {
+            document.getElementById('welcomeScreen').style.display = "none";
+            document.getElementById('comparisonWorkspace').style.display = "none";
+            document.getElementById('consolidatedWorkspace').style.display = "none";
+
+            activeReport = {
+                constructor: constructor,
+                title: `Diagnostic : ${constructor}`,
+                date: new Date().toISOString().split('T')[0],
+                tech: "", host: "", model: "", sn: "", ip: "", dc: "", firmware: "",
+                capacityTotal: 100,
+                capacityUsed: 45,
+                blocks: JSON.parse(JSON.stringify(TEMPLATES[constructor] || []))
+            };
+
+            document.getElementById('reportTitle').innerText = activeReport.title;
+            document.getElementById('reportWorkspace').style.display = "block";
+            
+            document.getElementById('repDate').value = activeReport.date;
+            document.getElementById('repTech').value = activeReport.tech;
+            document.getElementById('repHost').value = activeReport.host;
+            document.getElementById('repModel').value = activeReport.model;
+            document.getElementById('repSN').value = activeReport.sn;
+            document.getElementById('repIP').value = activeReport.ip;
+            document.getElementById('repDC').value = activeReport.dc;
+            document.getElementById('repFirmware').value = activeReport.firmware;
+            
+            renderBlocks();
+            syncCapacityInputs('init', 45);
+        }
+
+        function syncCapacityInputs(triggerSource, val) {
+            if (!activeReport) return;
+
+            let total = parseFloat(document.getElementById('repCapTotal').value) || 100;
+            let used = parseFloat(document.getElementById('repCapUsed').value) || 0;
+            let slider = document.getElementById('repCapSlider');
+            let sliderLabel = document.getElementById('sliderValLabel');
+
+            if (triggerSource === 'total') {
+                activeReport.capacityTotal = total;
+                let pct = total > 0 ? Math.round((used / total) * 100) : 0;
+                slider.value = Math.min(pct, 100);
+                sliderLabel.innerText = `${slider.value}%`;
+            } else if (triggerSource === 'used') {
+                activeReport.capacityUsed = used;
+                let pct = total > 0 ? Math.round((used / total) * 100) : 0;
+                slider.value = Math.min(pct, 100);
+                sliderLabel.innerText = `${slider.value}%`;
+            } else if (triggerSource === 'slider') {
+                let pct = parseFloat(val);
+                used = Math.round((pct / 100) * total * 100) / 100;
+                document.getElementById('repCapUsed').value = used;
+                activeReport.capacityUsed = used;
+                sliderLabel.innerText = `${pct}%`;
+            } else if (triggerSource === 'init') {
+                document.getElementById('repCapTotal').value = activeReport.capacityTotal;
+                document.getElementById('repCapUsed').value = activeReport.capacityUsed;
+                let pct = activeReport.capacityTotal > 0 ? Math.round((activeReport.capacityUsed / activeReport.capacityTotal) * 100) : 0;
+                slider.value = pct;
+                sliderLabel.innerText = `${pct}%`;
+            }
+
+            updateEngineAndGraphics();
+        }
+
+        function updateMetadata(field, value) { 
+            if (activeReport) activeReport[field] = value; 
+        }
+
+        function filterChecks(level) {
+            activeFilter = level;
+            renderBlocks();
+        }
+
+        function renderBlocks() {
+            if (!activeReport) return;
+            const container = document.getElementById('blocksArea');
+            container.innerHTML = "";
+
+            activeReport.blocks.forEach((block, blockIndex) => {
+                const blockCard = document.createElement('div');
+                blockCard.className = "block-card";
+                blockCard.dataset.index = blockIndex;
+
+                let blockContent = "";
+                if (block.type === "table") {
+                    const filteredChecks = block.checks.filter(c => {
+                        if (activeFilter === 'ALL') return true;
+                        return c.status === activeFilter;
+                    });
+
+                    blockContent = `
+                        <table class="check-table">
+                            <thead>
+                                <tr>
+                                    <th>Élément de Contrôle</th>
+                                    <th style="width: 140px;">Statut</th>
+                                    <th>Commentaires & Remarques terrain</th>
+                                    <th style="width: 40px; text-align:center;">🗑️</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filteredChecks.map((c, cIndex) => `
+                                    <tr>
+                                        <td>
+                                            <input type="text" class="editable-item-input" value="${c.item}" onchange="updateCheckItemName(${blockIndex}, ${cIndex}, this.value)">
+                                        </td>
+                                        <td>
+                                            <select class="status-select ${c.status.toLowerCase()}" onchange="updateCheckStatus(${blockIndex}, ${cIndex}, this.value)">
+                                                <option value="OK" ${c.status === 'OK' ? 'selected' : ''}>🟢 OK</option>
+                                                <option value="WARN" ${c.status === 'WARN' ? 'selected' : ''}>🟡 Warning</option>
+                                                <option value="CRIT" ${c.status === 'CRIT' ? 'selected' : ''}>🔴 Critical</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="text" value="${c.comment}" oninput="updateCheckComment(${blockIndex}, ${cIndex}, this.value)" style="width:100%; border:none; background:transparent; color:inherit; outline:none;">
+                                        </td>
+                                        <td style="text-align:center;">
+                                            <button class="btn-inline-del" onclick="deleteCheckItem(${blockIndex}, ${cIndex})">✕</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                                <tr>
+                                    <td colspan="4" style="text-align: left; background: rgba(255,255,255,0.02)">
+                                        <button class="btn" style="padding: 4px 10px; font-size: 0.75rem;" onclick="addCheckItem(${blockIndex})">➕ Ajouter une ligne de contrôle</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    `;
+                } else if (block.type === "note") {
+                    blockContent = `<textarea style="width:100%; min-height:100px; background-color:var(--bg-secondary); border:1px solid var(--border-color); color:#fff; padding:10px; border-radius:4px; margin-top:10px; outline:none;" oninput="updateNoteContent(${blockIndex}, this.value)">${block.content || ''}</textarea>`;
+                }
+
+                blockCard.innerHTML = `
+                    <div class="block-card-header">
+                        <div class="block-card-title">⚙️ ${block.title}</div>
+                        <div class="block-actions">
+                            <button class="btn" style="padding: 2px 8px; font-size:0.75rem;" onclick="deleteBlock(${blockIndex})">Supprimer Bloc</button>
+                        </div>
+                    </div>
+                    ${blockContent}
+                `;
+                container.appendChild(blockCard);
+            });
+        }
+
+        function updateCheckItemName(blockIdx, checkIdx, newName) {
+            if(activeReport.blocks[blockIdx] && activeReport.blocks[blockIdx].checks[checkIdx]) {
+                activeReport.blocks[blockIdx].checks[checkIdx].item = newName;
+                updateEngineAndGraphics();
+            }
+        }
+
+        function addCheckItem(blockIdx) {
+            if(activeReport.blocks[blockIdx]) {
+                activeReport.blocks[blockIdx].checks.push({ item: "Nouvel élément de contrôle", status: "OK", comment: "" });
+                renderBlocks();
+                updateEngineAndGraphics();
+            }
+        }
+
+        function deleteCheckItem(blockIdx, checkIdx) {
+            if(activeReport.blocks[blockIdx]) {
+                activeReport.blocks[blockIdx].checks.splice(checkIdx, 1);
+                renderBlocks();
+                updateEngineAndGraphics();
+            }
+        }
+
+        function updateCheckStatus(blockIdx, checkIdx, value) {
+            if(activeReport.blocks[blockIdx] && activeReport.blocks[blockIdx].checks[checkIdx]) {
+                activeReport.blocks[blockIdx].checks[checkIdx].status = value;
+                updateEngineAndGraphics();
+                renderBlocks();
+            }
+        }
+
+        function updateCheckComment(blockIdx, checkIdx, value) { 
+            if(activeReport.blocks[blockIdx] && activeReport.blocks[blockIdx].checks[checkIdx]) {
+                activeReport.blocks[blockIdx].checks[checkIdx].comment = value; 
+            }
+        }
+        
+        function updateNoteContent(blockIdx, value) { 
+            if(activeReport.blocks[blockIdx]) {
+                activeReport.blocks[blockIdx].content = value; 
+            }
+        }
+
+        function addCustomBlock(type) {
+            if (!activeReport) return;
+            if (type === 'Tableau') {
+                activeReport.blocks.push({ title: "Bloc Personnalisé de Contrôle", type: "table", checks: [{ item: "Contrôle manuel", status: "OK", comment: "" }] });
+            } else {
+                activeReport.blocks.push({ title: "Observations & Notes Libres", type: "note", content: "" });
+            }
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        function deleteBlock(index) { 
+            if (activeReport) {
+                activeReport.blocks.splice(index, 1); 
+                renderBlocks(); 
+                updateEngineAndGraphics(); 
+            }
+        }
+
+        function initDragAndDrop() {
+            Sortable.create(document.getElementById('blocksArea'), {
+                animation: 150,
+                onEnd: function (evt) {
+                    if (activeReport) {
+                        const movedItem = activeReport.blocks.splice(evt.oldIndex, 1)[0];
+                        activeReport.blocks.splice(evt.newIndex, 0, movedItem);
+                    }
+                }
+            });
+        }
+
+        function updateEngineAndGraphics() {
+            if (!activeReport) return;
+
+            let totalChecks = 0, okCount = 0, warnCount = 0, critCount = 0;
+            const anomalies = [];
+
+            activeReport.blocks.forEach(block => {
+                if (block.type === 'table') {
+                    block.checks.forEach(check => {
+                        totalChecks++;
+                        if (check.status === 'OK') okCount++;
+                        else if (check.status === 'WARN') {
+                            warnCount++;
+                            anomalies.push({ item: check.item, level: 'WARN', comment: check.comment || 'Avertissement requis' });
+                        } else if (check.status === 'CRIT') {
+                            critCount++;
+                            anomalies.push({ item: check.item, level: 'CRIT', comment: check.comment || 'Défaut critique !' });
+                        }
+                    });
+                }
+            });
+
+            let pctUsed = activeReport.capacityTotal > 0 ? (activeReport.capacityUsed / activeReport.capacityTotal) * 100 : 0;
+            if (pctUsed >= 90) {
+                critCount++;
+                anomalies.push({ item: "Capacité Stockage Disque", level: "CRIT", comment: `Saturation critique imminente (${Math.round(pctUsed)}%) !` });
+            } else if (pctUsed >= 80) {
+                warnCount++;
+                anomalies.push({ item: "Capacité Stockage Disque", level: "WARN", comment: `Espace disque supérieur au seuil d'alerte (${Math.round(pctUsed)}%).` });
+            }
+
+            let score = totalChecks > 0 ? Math.max(0, 100 - ((warnCount * 12) + (critCount * 35))) : 100;
+            activeReport.calculatedScore = score; 
+            
+            const kpiScoreEl = document.getElementById('kpiScore');
+            const kpiLabelEl = document.getElementById('kpiLabel');
+            kpiScoreEl.innerText = `${Math.round(score)}%`;
+
+            if (score >= 80) { kpiScoreEl.style.borderColor = "var(--accent-green)"; kpiLabelEl.innerText = "Excellent / Conforme"; kpiLabelEl.style.color = "var(--accent-green)"; }
+            else if (score >= 50) { kpiScoreEl.style.borderColor = "var(--accent-orange)"; kpiLabelEl.innerText = "Attention Requise"; kpiLabelEl.style.color = "var(--accent-orange)"; }
+            else { kpiScoreEl.style.borderColor = "var(--accent-red)"; kpiLabelEl.innerText = "Alerte Majeure"; kpiLabelEl.style.color = "var(--accent-red)"; }
+
+            const anomaliesList = document.getElementById('anomaliesList');
+            anomaliesList.innerHTML = anomalies.length === 0 ? `<li style="color: var(--text-muted); font-style: italic;">Aucune anomalie détectée.</li>` : "";
+            anomalies.forEach(ano => {
+                const li = document.createElement('li');
+                li.className = `anomaly-item ${ano.level.toLowerCase()}`;
+                li.innerHTML = `<div><strong>${ano.item}</strong> - ${ano.comment}</div> <span>[${ano.level}]</span>`;
+                anomaliesList.appendChild(li);
+            });
+
+            renderAnomaliesChart(okCount, warnCount, critCount);
+            renderCapacityChart(activeReport.capacityTotal, activeReport.capacityUsed, pctUsed);
+        }
+
+        function renderAnomaliesChart(ok, warn, crit) {
+            const canvas = document.getElementById('chartAnomalies');
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (anomalyChartInstance) anomalyChartInstance.destroy();
+            anomalyChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: ['Conforme', 'Warning', 'Critique'], datasets: [{ data: [ok, warn, crit], backgroundColor: ['#22c55e', '#eab308', '#ef4444'], borderWidth: 1, borderColor: '#1e293b' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#f8fafc', font: { size: 10 } } } } }
+            });
+        }
+
+        function renderCapacityChart(total, used, pctUsed) {
+            const canvas = document.getElementById('chartCapacity');
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const libre = Math.max(0, total - used);
+            
+            let sliceColor = '#22c55e'; 
+            if (pctUsed >= 80 && pctUsed < 90) sliceColor = '#eab308'; 
+            else if (pctUsed >= 90) sliceColor = '#ef4444'; 
+
+            if (capacityChartInstance) capacityChartInstance.destroy();
+            capacityChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: { 
+                    labels: ['Utilisé (To)', 'Libre (To)'], 
+                    datasets: [{ data: [used, libre], backgroundColor: [sliceColor, '#38bdf8'], borderWidth: 1, borderColor: '#1e293b' }] 
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#f8fafc', font: { size: 10 } } } } }
+            });
+        }
+
+        function saveActiveReport() {
+            if (!activeReport) return;
+            
+            const transaction = db.transaction([STORE_NAME], "readwrite");
+            const store = transaction.objectStore(STORE_NAME);
+            
+            if (activeReport.id === null || activeReport.id === undefined) {
+                delete activeReport.id; 
+            }
+            
+            const request = store.put(activeReport);
+            request.onsuccess = (e) => { 
+                activeReport.id = e.target.result;
+                const badge = document.getElementById('autosaveStatus');
+                badge.innerText = "Sauvegardé " + new Date().toLocaleTimeString();
+                badge.style.color = "var(--accent-green)";
+                loadReportsHistory(); 
+            };
+        }
+
+        function autosaveActiveReport() {
+            if (!activeReport) return;
+            const transaction = db.transaction([STORE_NAME], "readwrite");
+            const store = transaction.objectStore(STORE_NAME);
+            if (activeReport.id === null || activeReport.id === undefined) delete activeReport.id;
+            
+            store.put(activeReport).onsuccess = (e) => {
+                activeReport.id = e.target.result;
+                const badge = document.getElementById('autosaveStatus');
+                badge.innerText = "Auto-sauvegardé " + new Date().toLocaleTimeString();
+                badge.style.color = "var(--accent-blue)";
+            };
+        }
+
+        function loadReportsHistory() {
+            const list = document.getElementById('historyList'); 
+            if(!list) return;
+            list.innerHTML = "";
+            db.transaction([STORE_NAME], "readonly").objectStore(STORE_NAME).openCursor().onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const rep = cursor.value;
+                    const li = document.createElement('li');
+                    li.className = `history-item ${activeReport && activeReport.id === rep.id ? 'active' : ''}`;
+                    
+                    li.innerHTML = `
+                        <input type="checkbox" class="history-selector" data-id="${rep.id}" onclick="event.stopPropagation()">
+                        <div class="history-item-content">
+                            <div class="item-header"><span>${rep.constructor}</span><span>${rep.date}</span></div>
+                            <div class="item-meta">${rep.host || 'Sans nom'} - ${rep.calculatedScore !== undefined ? Math.round(rep.calculatedScore) : 100}%</div>
+                        </div>
+                    `;
+                    
+                    li.querySelector('.history-item-content').onclick = () => loadReportFromDb(rep.id);
+                    list.appendChild(li);
+                    cursor.continue();
+                }
+            };
+        }
+
+        function loadReportFromDb(id) {
+            document.getElementById('welcomeScreen').style.display = "none";
+            document.getElementById('comparisonWorkspace').style.display = "none";
+            document.getElementById('consolidatedWorkspace').style.display = "none";
+
+            db.transaction([STORE_NAME], "readonly").objectStore(STORE_NAME).get(id).onsuccess = (e) => {
+                activeReport = e.target.result;
+                document.getElementById('reportTitle').innerText = activeReport.title;
+                document.getElementById('reportWorkspace').style.display = "block";
+                document.getElementById('repDate').value = activeReport.date;
+                document.getElementById('repTech').value = activeReport.tech || "";
+                document.getElementById('repHost').value = activeReport.host || "";
+                document.getElementById('repModel').value = activeReport.model || "";
+                document.getElementById('repSN').value = activeReport.sn || "";
+                document.getElementById('repIP').value = activeReport.ip || "";
+                document.getElementById('repDC').value = activeReport.dc || "";
+                document.getElementById('repFirmware').value = activeReport.firmware || "";
+                
+                renderBlocks();
+                syncCapacityInputs('init');
+                loadReportsHistory();
+            };
+        }
+
+        function getSelectedReportIds() {
+            const checkboxes = document.querySelectorAll('.history-selector:checked');
+            return Array.from(checkboxes).map(cb => parseInt(cb.getAttribute('data-id')));
+        }
+
+        function compareSelectedReports() {
+            const ids = getSelectedReportIds();
+            if (ids.length < 2) {
+                alert("Veuillez cocher au moins 2 rapports dans l'historique local pour pouvoir les comparer.");
+                return;
+            }
+
+            document.getElementById('welcomeScreen').style.display = "none";
+            document.getElementById('reportWorkspace').style.display = "none";
+            document.getElementById('consolidatedWorkspace').style.display = "none";
+            const workspace = document.getElementById('comparisonWorkspace');
+            workspace.style.display = "block";
+
+            const transaction = db.transaction([STORE_NAME], "readonly");
+            const store = transaction.objectStore(STORE_NAME);
+            const selectedReports = [];
+
+            let loadedCount = 0;
+            ids.forEach(id => {
+                store.get(id).onsuccess = (e) => {
+                    selectedReports.push(e.target.result);
+                    loadedCount++;
+                    if (loadedCount === ids.length) {
+                        renderComparisonTable(selectedReports);
+                    }
+                };
+            });
+        }
+
+        function renderComparisonTable(reports) {
+            reports.sort((a,b) => new Date(a.date) - new Date(b.date));
+            const table = document.getElementById('compareTable');
+            table.innerHTML = "";
+
+            let headHtml = `<tr><th>Critères d'Analyse</th>`;
+            reports.forEach(r => {
+                headHtml += `<th>${r.constructor} (${r.host || 'Sans nom'})</th>`;
+            });
+            headHtml += `</tr>`;
+
+            const criteria = [
+                { label: "Date du Contrôle", key: "date" },
+                { label: "Technicien", key: "tech" },
+                { label: "Modèle", key: "model" },
+                { label: "Numéro de Série", key: "sn" },
+                { label: "Version Firmware", key: "firmware" },
+                { label: "Capacité Totale", key: "capacityTotal", suffix: " To" },
+                { label: "Capacité Utilisée", key: "capacityUsed", suffix: " To" },
+                { label: "Score de Santé", key: "calculatedScore", suffix: "%", badge: true }
+            ];
+
+            let bodyHtml = "";
+            criteria.forEach(crit => {
+                bodyHtml += `<tr><td><strong>${crit.label}</strong></td>`;
+                reports.forEach(r => {
+                    let val = r[crit.key] !== undefined ? r[crit.key] : "N/A";
+                    if (crit.suffix && r[crit.key] !== undefined) val += crit.suffix;
+                    
+                    if (crit.badge && r[crit.key] !== undefined) {
+                        let color = "var(--accent-green)";
+                        if (r[crit.key] < 50) color = "var(--accent-red)";
+                        else if (r[crit.key] < 80) color = "var(--accent-orange)";
+                        bodyHtml += `<td style="color:${color}; font-weight:bold;">${Math.round(r[crit.key])}%</td>`;
+                    } else {
+                        bodyHtml += `<td>${val}</td>`;
+                    }
+                });
+                bodyHtml += `</tr>`;
+            });
+
+            table.innerHTML = headHtml + bodyHtml;
+
+            const synthContainer = document.getElementById('compareSynthesisText');
+            let synthesisText = `<p>L'analyse comparative porte sur <strong>${reports.length} rapports</strong> :</p><ul style="margin-left: 20px; margin-top: 10px;">`;
+            
+            let totalCap = 0, totalUsed = 0;
+            reports.forEach(r => {
+                totalCap += parseFloat(r.capacityTotal) || 0;
+                totalUsed += parseFloat(r.capacityUsed) || 0;
+                let score = r.calculatedScore !== undefined ? r.calculatedScore : 100;
+                let usage = r.capacityTotal > 0 ? Math.round((r.capacityUsed / r.capacityTotal) * 100) : 0;
+                synthesisText += `<li><strong>${r.constructor}</strong> (${r.date}) : Santé <strong>${Math.round(score)}%</strong> | Espace : <strong>${usage}%</strong></li>`;
+            });
+            synthesisText += `</ul>`;
+
+            let overallUsagePct = totalCap > 0 ? Math.round((totalUsed / totalCap) * 100) : 0;
+            synthesisText += `<p style="margin-top:15px;">La capacité cumulée analysée est de <strong>${totalCap.toFixed(1)} To</strong> avec un taux d'occupation de <strong>${overallUsagePct}%</strong>.</p>`;
+            synthContainer.innerHTML = synthesisText;
+        }
+
+        function generateConsolidatedReport() {
+            const transaction = db.transaction([STORE_NAME], "readonly");
+            const store = transaction.objectStore(STORE_NAME);
+            const latestByConstructor = { PowerStore: null, PowerScale: null, VMAX: null, NetApp: null };
+
+            store.openCursor().onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const r = cursor.value;
+                    const constr = r.constructor;
+                    if (latestByConstructor[constr] === null || new Date(r.date) > new Date(latestByConstructor[constr].date)) {
+                        latestByConstructor[constr] = r;
+                    }
+                    cursor.continue();
+                } else {
+                    renderConsolidation(latestByConstructor);
+                }
+            };
+        }
+
+        function renderConsolidation(dataMap) {
+            document.getElementById('welcomeScreen').style.display = "none";
+            document.getElementById('reportWorkspace').style.display = "none";
+            document.getElementById('comparisonWorkspace').style.display = "none";
+            const workspace = document.getElementById('consolidatedWorkspace');
+            workspace.style.display = "block";
+
+            const activeItems = Object.values(dataMap).filter(x => x !== null);
+            if (activeItems.length === 0) {
+                alert("Aucun rapport trouvé. Veuillez d'abord créer et enregistrer des rapports.");
+                return;
+            }
+
+            let totalCap = 0;
+            let totalUsed = 0;
+            activeItems.forEach(r => {
+                totalCap += parseFloat(r.capacityTotal) || 0;
+                totalUsed += parseFloat(r.capacityUsed) || 0;
+            });
+
+            document.getElementById('consolidatedDate').value = new Date().toLocaleDateString('fr-FR');
+            document.getElementById('consolidatedCount').value = `${activeItems.length} / 4 Équipements`;
+            document.getElementById('consolidatedCapTotal').value = totalCap.toFixed(1) + " To";
+            document.getElementById('consolidatedCapUsed').value = totalUsed.toFixed(1) + " To";
+
+            Object.values(consolidatedCharts).forEach(chart => chart.destroy());
+            consolidatedCharts = {};
+
+            const visualGrid = document.getElementById('consolidatedVisualGrid');
+            visualGrid.innerHTML = "";
+
+            let allAnomalies = [];
+
+            activeItems.forEach((r, idx) => {
+                let usagePct = r.capacityTotal > 0 ? Math.round((r.capacityUsed / r.capacityTotal) * 100) : 0;
+                let score = r.calculatedScore !== undefined ? r.calculatedScore : 100;
+                
+                let healthColor = "var(--accent-green)";
+                if (score < 50) healthColor = "var(--accent-red)";
+                else if (score < 80) healthColor = "var(--accent-orange)";
+
+                const card = document.createElement('div');
+                card.className = "consolidated-card";
+                card.innerHTML = `
+                    <div class="consolidated-card-header">
+                        <h3>🤖 ${r.constructor}</h3>
+                        <span style="color: ${healthColor}; font-weight: bold; font-size: 1.1rem;">Santé: ${Math.round(score)}%</span>
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
+                        Host: <strong>${r.host || 'N/A'}</strong> | FW: ${r.firmware || 'N/A'}
+                    </p>
+                    
+                    <div class="kpi-charts-card" style="background-color: var(--bg-secondary); border: none; padding: 0.5rem 0;">
+                        <div>
+                            <p style="font-size: 0.75rem; text-align:center;">État Baie</p>
+                            <div class="chart-container" style="height: 100px;">
+                                <canvas id="cChartHealth-${idx}"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <p style="font-size: 0.75rem; text-align:center;">Occupation (${usagePct}%)</p>
+                            <div class="chart-container" style="height: 100px;">
+                                <canvas id="cChartCap-${idx}"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                visualGrid.appendChild(card);
+
+                setTimeout(() => {
+                    const ctxHealth = document.getElementById(`cChartHealth-${idx}`).getContext('2d');
+                    const configHealth = new Chart(ctxHealth, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['OK', 'Anomalie'],
+                            datasets: [{ data: [score, 100 - score], backgroundColor: [healthColor, '#334155'], borderWidth: 0 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+
+                    const ctxCap = document.getElementById(`cChartCap-${idx}`).getContext('2d');
+                    let sliceColor = '#22c55e';
+                    if (usagePct >= 90) sliceColor = '#ef4444';
+                    else if (usagePct >= 80) sliceColor = '#eab308';
+
+                    const configCap = new Chart(ctxCap, {
+                        type: 'pie',
+                        data: {
+                            labels: ['Utilisé', 'Libre'],
+                            datasets: [{ data: [r.capacityUsed, Math.max(0, r.capacityTotal - r.capacityUsed)], backgroundColor: [sliceColor, '#38bdf8'], borderWidth: 0 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+
+                    consolidatedCharts[`health-${idx}`] = configHealth;
+                    consolidatedCharts[`cap-${idx}`] = configCap;
+                }, 50);
+
+                r.blocks.forEach(b => {
+                    if (b.type === 'table') {
+                        b.checks.forEach(c => {
+                            if (c.status !== 'OK') {
+                                allAnomalies.push({ constr: r.constructor, host: r.host, check: c.item, status: c.status, comment: c.comment });
+                            }
+                        });
+                    }
+                });
+            });
+
+            const actionContainer = document.getElementById('consolidatedActions');
+            if (allAnomalies.length === 0) {
+                actionContainer.innerHTML = `<p style="color: var(--accent-green); font-weight: bold;">✅ Toutes les infrastructures du parc sont saines. Aucun défaut détecté.</p>`;
+            } else {
+                let actionHtml = `<table class="compare-table">
+                    <tr>
+                        <th>Équipement</th>
+                        <th>Vérification défaillante</th>
+                        <th>Gravité</th>
+                        <th>Description Terrain</th>
+                    </tr>`;
+                allAnomalies.forEach(ano => {
+                    let badgeColor = ano.status === 'CRIT' ? 'var(--accent-red)' : 'var(--accent-orange)';
+                    actionHtml += `<tr>
+                        <td><strong>${ano.constr}</strong> (${ano.host || 'N/A'})</td>
+                        <td>${ano.check}</td>
+                        <td style="color:${badgeColor}; font-weight:bold;">${ano.status}</td>
+                        <td>${ano.comment || 'Vérification requise.'}</td>
+                    </tr>`;
+                });
+                actionHtml += `</table>`;
+                actionContainer.innerHTML = actionHtml;
+            }
+        }
+
+        function exportDatabaseJSON() {
+            const transaction = db.transaction([STORE_NAME], "readonly");
+            const store = transaction.objectStore(STORE_NAME);
+            const allData = [];
+
+            store.openCursor().onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    allData.push(cursor.value);
+                    cursor.continue();
+                } else {
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allData, null, 2));
+                    const downloadAnchor = document.createElement('a');
+                    downloadAnchor.setAttribute("href", dataStr);
+                    downloadAnchor.setAttribute("download", `SHCM_Backup_${new Date().toISOString().split('T')[0]}.json`);
+                    document.body.appendChild(downloadAnchor);
+                    downloadAnchor.click();
+                    downloadAnchor.remove();
+                }
+            };
+        }
+
+        function triggerImport() {
+            document.getElementById('importFile').click();
+        }
+
+        function importDatabaseJSON(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (!Array.isArray(importedData)) throw new Error("Le format du fichier doit être un tableau JSON.");
+
+                    const transaction = db.transaction([STORE_NAME], "readwrite");
+                    const store = transaction.objectStore(STORE_NAME);
+
+                    importedData.forEach(item => {
+                        delete item.id;
+                        store.put(item);
+                    });
+
+                    transaction.oncomplete = () => {
+                        alert("Base de données importée et fusionnée avec succès !");
+                        loadReportsHistory();
+                    };
+                } catch (err) {
+                    alert("Erreur lors de la lecture du fichier : " + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function clearDatabase() { 
+            if (confirm("Vider définitivement l'historique local ?")) { 
+                db.transaction([STORE_NAME], "readwrite").objectStore(STORE_NAME).clear().onsuccess = () => { 
+                    activeReport = null; 
+                    document.getElementById('welcomeScreen').style.display = "flex";
+                    document.getElementById('reportWorkspace').style.display = "none"; 
+                    document.getElementById('comparisonWorkspace').style.display = "none"; 
+                    document.getElementById('consolidatedWorkspace').style.display = "none"; 
+                    loadReportsHistory(); 
+                }; 
+            } 
+        }
+    </script>
+</body>
+</html>

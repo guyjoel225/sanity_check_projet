@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage Health Check Manager (SHCM)</title>
+    
+    <!-- Chart.js (Graphiques dynamiques) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SortableJS (Drag & Drop des blocs de contrôle) -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <!-- html2canvas & jsPDF (Génération et export PDF propre) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* ==========================================================================
+           1. THÈME & DESIGN SYSTEM (Moderne Dark/Cyberpunk discret & Print-friendly)
+           ========================================================================== */
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #22c55e;
+            --accent-orange: #f97316;
+            --accent-red: #ef4444;
+            --border-color: #475569;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: var(--font-stack);
+            line-height: 1.5;
+            padding-bottom: 50px;
+        }
+
+        header {
+            background-color: var(--bg-secondary);
+            border-bottom: 2px solid var(--border-color);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .logo-area h1 {
+            font-size: 1.5rem;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-area span {
+            font-size: 0.8rem;
+            background: var(--border-color);
+            color: var(--text-main);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .global-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* Boutons */
+        .btn {
+            background-color: var(--bg-tertiary);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background-color: var(--border-color);
+            border-color: var(--accent-blue);
+        }
+
+        .btn-primary {
+            background-color: var(--accent-blue);
+            color: #000;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #7dd3fc;
+        }
+
+        .btn-danger {
+            background-color: var(--accent-red);
+            border: none;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background-color: #f87171;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 900px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Sidebar Navigation / Historique */
+        aside {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+            height: fit-content;
+        }
+
+        aside h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            color: var(--accent-blue);
+        }
+
+        .history-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            background-color: var(--bg-primary);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: border-color 0.2s;
+        }
+
+        .history-item:hover, .history-item.active {
+            border-color: var(--accent-blue);
+        }
+
+        .history-item .item-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .history-item .item-meta {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Zone Principale de Travail */
+        main {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* Panneau de sélection de template */
+        .template-selector {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        .template-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-top: 1rem;
+        }
+
+        .template-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .template-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-blue);
+        }
+
+        .template-card h3 {
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .template-card p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Formulaire de rapport actif */
+        .report-workspace {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 2rem;
+            display: none;
+        }
+
+        .report-header-fields {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+            margin-bottom: 2rem;
+            background-color: var(--bg-primary);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .field-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .field-group input, .field-group select, .field-group textarea {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .field-group input:focus, .field-group select:focus {
+            border-color: var(--accent-blue);
+        }
+
+        /* Zone d'ajustement dynamique de capacité */
+        .capacity-slider-box {
+            grid-column: 1 / -1;
+            background: rgba(56, 189, 248, 0.05);
+            border: 1px dashed var(--accent-blue);
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 5px;
+        }
+
+        .slider-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 8px;
+        }
+
+        .slider-wrapper input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent-blue);
+            cursor: pointer;
+        }
+
+        /* KPI Dashboard interne au rapport */
+        .dashboard-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-score-card {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .kpi-score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 8px solid var(--accent-green);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 10px 0;
+            transition: border-color 0.3s ease;
+        }
+
+        .kpi-charts-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 550px) {
+            .kpi-charts-card {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-container {
+            position: relative;
+            height: 180px;
+            width: 100%;
+        }
+
+        /* Gestionnaire de Blocs Dynamiques */
+        .blocks-area {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .block-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            position: relative;
+        }
+
+        .block-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .block-card-title {
+            font-weight: bold;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .block-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Éléments internes d'un bloc de contrôle */
+        .check-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .check-table th, .check-table td {
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        .check-table th {
+            background-color: var(--bg-secondary);
+        }
+
+        .editable-item-input {
+            background: transparent;
+            border: 1px dashed var(--border-color);
+            color: var(--text-main);
+            padding: 4px 8px;
+            font-weight: bold;
+            border-radius: 4px;
+            width: 100%;
+        }
+        .editable-item-input:focus {
+            border-color: var(--accent-blue);
+            outline: none;
+        }
+
+        .status-select {
+            padding: 4px;
+            border-radius: 4px;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            font-weight: bold;
+        }
+
+        .status-select.ok { border-color: var(--accent-green); color: var(--accent-green); }
+        .status-select.warn { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .status-select.crit { border-color: var(--accent-red); color: var(--accent-red); }
+
+        .btn-inline-del {
+            background: transparent;
+            border: none;
+            color: var(--accent-red);
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0 5px;
+        }
+        .btn-inline-del:hover {
+            color: #f87171;
+        }
+
+        .block-toolbar {
+            background-color: var(--bg-primary);
+            border: 1px dashed var(--border-color);
+            padding: 1rem;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 1.5rem;
+        }
+
+        /* Anomalies & Recommandations */
+        .anomalies-section {
+            margin-top: 2rem;
+            background-color: #271616;
+            border: 1px solid var(--accent-red);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .anomalies-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .anomaly-item {
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .anomaly-item.warn {
+            background-color: rgba(249, 115, 22, 0.2);
+            border: 1px solid var(--accent-orange);
+            color: #ffedd5;
+        }
+
+        .anomaly-item.crit {
+            background-color: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--accent-red);
+            color: #fee2e2;
+        }
+
+        /* Print profile */
+        @media print {
+            body { background: #fff !important; color: #000 !important; padding: 0; }
+            header, aside, .template-selector, .block-toolbar, .block-actions, .global-actions, .btn-inline-del { display: none !important; }
+            .container { display: block !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+            .report-workspace { display: block !important; border: none !important; background: #fff !important; padding: 0 !important; }
+            .block-card { page-break-inside: avoid; border: 1px solid #ccc !important; background: #fff !important; color: #000 !important; margin-bottom: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-area">
+            <h1>Storage Health Check Manager (SHCM) <span>v1.1</span></h1>
+        </div>
+        <div class="global-actions">
+            <button class="btn" onclick="exportDataJSON()">📥 Exporter JSON</button>
+            <button class="btn" onclick="document.getElementById('importFile').click()">📤 Importer JSON</button>
+            <input type="file" id="importFile" style="display: none;" onchange="importDataJSON(event)">
+            <button class="btn btn-primary" onclick="generatePDF()">📄 Exporter PDF (Rapport)</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <aside>
+            <h2>Historique Local</h2>
+            <ul id="historyList" class="history-list"></ul>
+            <button class="btn btn-danger" style="margin-top: 1.5rem; width: 100%; justify-content: center;" onclick="clearDatabase()">Réinitialiser DB</button>
+        </aside>
+
+        <main>
+            <section class="template-selector">
+                <h2>Initialiser un nouveau diagnostic de santé</h2>
+                <div class="template-grid">
+                    <div class="template-card" onclick="initNewReport('PowerStore')">
+                        <h3>Dell PowerStore</h3>
+                        <p>Appliance, CPU, Volumes & Réplication</p>
+                    </div>
+                    <div class="template-card" onclick="initNewReport('PowerScale')">
+                        <h3>Dell PowerScale</h3>
+                        <p>OneFS, Clusters, Pools & FlexProtect</p>
+                    </div>
+                    <div class="template-card" onclick="initNewReport('VMAX')">
+                        <h3>VMAX / PowerMax</h3>
+                        <p>Symmetrix, Directors, Pools & SRDF</p>
+                    </div>
+                    <div class="template-card" onclick="initNewReport('NetApp')">
+                        <h3>NetApp ONTAP</h3>
+                        <p>Nodes, Aggregates, Volumes & SnapMirror</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="reportWorkspace" class="report-workspace">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px;">
+                    <h2 id="reportTitle" style="color: var(--accent-blue);">Diagnostic</h2>
+                    <button class="btn btn-primary" onclick="saveActiveReport()">Enregistrer le Rapport</button>
+                </div>
+
+                <!-- 1. Fiche Équipement Générale -->
+                <div class="report-header-fields">
+                    <div class="field-group">
+                        <label>Date du Contrôle</label>
+                        <input type="date" id="repDate" onchange="updateMetadata('date', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Technicien Référent</label>
+                        <input type="text" id="repTech" oninput="updateMetadata('tech', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Nom de l'Équipement</label>
+                        <input type="text" id="repHost" oninput="updateMetadata('host', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Modèle Exact</label>
+                        <input type="text" id="repModel" oninput="updateMetadata('model', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Numéro de Série (S/N)</label>
+                        <input type="text" id="repSN" oninput="updateMetadata('sn', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Adresse IP Management</label>
+                        <input type="text" id="repIP" oninput="updateMetadata('ip', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Datacenter / Localisation</label>
+                        <input type="text" id="repDC" oninput="updateMetadata('dc', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Version Firmware / OS</label>
+                        <input type="text" id="repFirmware" oninput="updateMetadata('firmware', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Capacité Stockage Totale (To)</label>
+                        <input type="number" id="repCapTotal" value="100" min="1" oninput="syncCapacityInputs('total', this.value)">
+                    </div>
+                    <div class="field-group">
+                        <label>Capacité Stockage Utilisée (To)</label>
+                        <input type="number" id="repCapUsed" value="45" min="0" oninput="syncCapacityInputs('used', this.value)">
+                    </div>
+
+                    <!-- Curseur Ajustable Interactif (Demande Utilisateur) -->
+                    <div class="capacity-slider-box">
+                        <label style="font-size: 0.8rem; font-weight: bold; color: var(--accent-blue);">🎛️ Ajustement Rapide de l'Espace Disque Utilisé (%)</label>
+                        <div class="slider-wrapper">
+                            <span id="sliderMinLabel" style="font-size: 0.8rem; color: var(--text-muted);">0%</span>
+                            <input type="range" id="repCapSlider" min="0" max="100" value="45" oninput="syncCapacityInputs('slider', this.value)">
+                            <span id="sliderValLabel" style="font-weight: bold; color: var(--accent-orange);">45%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Synthèse & Dashboard Automatique -->
+                <div class="dashboard-row">
+                    <div class="kpi-score-card">
+                        <h3>Score de Santé Global</h3>
+                        <div id="kpiScore" class="kpi-score-circle">100%</div>
+                        <p id="kpiLabel" style="font-weight: bold; color: var(--accent-green);">Excellent</p>
+                    </div>
+                    <div class="kpi-charts-card">
+                        <div>
+                            <h4 style="font-size: 0.8rem; margin-bottom: 5px; text-align: center;">Répartition Anomalies</h4>
+                            <div class="chart-container">
+                                <canvas id="chartAnomalies"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 0.8rem; margin-bottom: 5px; text-align: center;">Capacité Utilisée</h4>
+                            <div class="chart-container">
+                                <canvas id="chartCapacity"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Formulaire Dynamique de Blocs Métriques -->
+                <h3>Points de Contrôle d'Infrastructure (Double-cliquez sur un nom pour le modifier)</h3>
+                <div id="blocksArea" class="blocks-area"></div>
+
+                <div class="block-toolbar">
+                    <button class="btn" onclick="addCustomBlock('Tableau')">➕ Ajouter Tableau</button>
+                    <button class="btn" onclick="addCustomBlock('Note')">➕ Ajouter Note Libre</button>
+                </div>
+
+                <!-- 4. Gestion des Anomalies Automatique -->
+                <div class="anomalies-section">
+                    <h3>⚠️ Liste Automatique des Anomalies Détectées</h3>
+                    <ul id="anomaliesList" class="anomalies-list"></ul>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let db;
+        const DB_NAME = "SHCM_Database_v1";
+        const STORE_NAME = "reports";
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onerror = event => reject("Erreur IndexedDB : " + event.target.errorCode);
+                request.onsuccess = event => { db = event.target.result; resolve(db); };
+                request.onupgradeneeded = event => {
+                    event.target.result.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
+                };
+            });
+        }
+
+        const TEMPLATES = {
+            PowerStore: [
+                { title: "Châssis & Appliance", type: "table", checks: [{ item: "Santé Générale Appliance", status: "OK", comment: "LEDs vertes" }, { item: "PowerStoreOS Version", status: "OK", comment: "À jour" }] },
+                { title: "Processeurs & Mémoire", type: "table", checks: [{ item: "Controller A (CPU/RAM)", status: "OK", comment: "Charge < 45%" }, { item: "Controller B (CPU/RAM)", status: "OK", comment: "Charge < 45%" }] }
+            ],
+            PowerScale: [
+                { title: "Cluster OneFS", type: "table", checks: [{ item: "État global OneFS", status: "OK", comment: "Aucun défaut" }] }
+            ],
+            VMAX: [
+                { title: "Symmetrix Engine", type: "table", checks: [{ item: "Version Microcode", status: "OK", comment: "Conforme" }] }
+            ],
+            NetApp: [
+                { title: "Cluster ONTAP", type: "table", checks: [{ item: "État du Cluster Interconnect", status: "OK", comment: "LIFs UP" }] }
+            ]
+        };
+
+        let activeReport = null;
+        let anomalyChartInstance = null;
+        let capacityChartInstance = null;
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            try { await initDB(); loadReportsHistory(); initDragAndDrop(); } catch (err) { console.error(err); }
+        });
+
+        function initNewReport(constructor) {
+            activeReport = {
+                id: null,
+                constructor: constructor,
+                title: `Diagnostic : ${constructor}`,
+                date: new Date().toISOString().split('T')[0],
+                tech: "", host: "", model: "", sn: "", ip: "", dc: "", firmware: "",
+                capacityTotal: 100,
+                capacityUsed: 45,
+                blocks: JSON.parse(JSON.stringify(TEMPLATES[constructor] || []))
+            };
+
+            document.getElementById('reportTitle').innerText = activeReport.title;
+            document.getElementById('reportWorkspace').style.display = "block";
+            
+            document.getElementById('repDate').value = activeReport.date;
+            document.getElementById('repTech').value = activeReport.tech;
+            document.getElementById('repHost').value = activeReport.host;
+            document.getElementById('repModel').value = activeReport.model;
+            document.getElementById('repSN').value = activeReport.sn;
+            document.getElementById('repIP').value = activeReport.ip;
+            document.getElementById('repDC').value = activeReport.dc;
+            document.getElementById('repFirmware').value = activeReport.firmware;
+            
+            syncCapacityInputs('init', 45);
+        }
+
+        // --- SYNCHRONISATION EXPANSIVE DES VALEURS DE DISQUES (Demande Utilisateur) ---
+        function syncCapacityInputs(triggerSource, val) {
+            if (!activeReport) return;
+
+            let total = parseFloat(document.getElementById('repCapTotal').value) || 100;
+            let used = parseFloat(document.getElementById('repCapUsed').value) || 0;
+            let slider = document.getElementById('repCapSlider');
+            let sliderLabel = document.getElementById('sliderValLabel');
+
+            if (triggerSource === 'total') {
+                activeReport.capacityTotal = total;
+                let pct = total > 0 ? Math.round((used / total) * 100) : 0;
+                slider.value = Math.min(pct, 100);
+                sliderLabel.innerText = `${slider.value}%`;
+            } else if (triggerSource === 'used') {
+                activeReport.capacityUsed = used;
+                let pct = total > 0 ? Math.round((used / total) * 100) : 0;
+                slider.value = Math.min(pct, 100);
+                sliderLabel.innerText = `${slider.value}%`;
+            } else if (triggerSource === 'slider') {
+                let pct = parseFloat(val);
+                used = Math.round((pct / 100) * total * 100) / 100;
+                document.getElementById('repCapUsed').value = used;
+                activeReport.capacityUsed = used;
+                sliderLabel.innerText = `${pct}%`;
+            } else if (triggerSource === 'init') {
+                document.getElementById('repCapTotal').value = activeReport.capacityTotal;
+                document.getElementById('repCapUsed').value = activeReport.capacityUsed;
+                let pct = activeReport.capacityTotal > 0 ? Math.round((activeReport.capacityUsed / activeReport.capacityTotal) * 100) : 0;
+                slider.value = pct;
+                sliderLabel.innerText = `${pct}%`;
+            }
+
+            updateEngineAndGraphics();
+        }
+
+        function updateMetadata(field, value) { if (activeReport) activeReport[field] = value; }
+
+        // --- RENDU DYNAMIQUE ET ÉDITION DES ELEMENTS DE CONTRÔLE (Demande Utilisateur) ---
+        function renderBlocks() {
+            const container = document.getElementById('blocksArea');
+            container.innerHTML = "";
+
+            activeReport.blocks.forEach((block, blockIndex) => {
+                const blockCard = document.createElement('div');
+                blockCard.className = "block-card";
+                blockCard.dataset.index = blockIndex;
+
+                let blockContent = "";
+                if (block.type === "table") {
+                    blockContent = `
+                        <table class="check-table">
+                            <thead>
+                                <tr>
+                                    <th>Élément de Contrôle</th>
+                                    <th style="width: 140px;">Statut</th>
+                                    <th>Commentaires & Remarques terrain</th>
+                                    <th style="width: 40px; text-align:center;">🗑️</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${block.checks.map((c, cIndex) => `
+                                    <tr>
+                                        <td>
+                                            <input type="text" class="editable-item-input" value="${c.item}" onchange="updateCheckItemName(${blockIndex}, ${cIndex}, this.value)">
+                                        </td>
+                                        <td>
+                                            <select class="status-select ${c.status.toLowerCase()}" onchange="updateCheckStatus(${blockIndex}, ${cIndex}, this.value)">
+                                                <option value="OK" ${c.status === 'OK' ? 'selected' : ''}>🟢 OK</option>
+                                                <option value="WARN" ${c.status === 'WARN' ? 'selected' : ''}>🟡 Warning</option>
+                                                <option value="CRIT" ${c.status === 'CRIT' ? 'selected' : ''}>🔴 Critical</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="text" value="${c.comment}" oninput="updateCheckComment(${blockIndex}, ${cIndex}, this.value)" style="width:100%; border:none; background:transparent; color:inherit; outline:none;">
+                                        </td>
+                                        <td style="text-align:center;">
+                                            <button class="btn-inline-del" onclick="deleteCheckItem(${blockIndex}, ${cIndex})">✕</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                                <tr>
+                                    <td colspan="4" style="text-align: left; background: rgba(255,255,255,0.02)">
+                                        <button class="btn" style="padding: 4px 10px; font-size: 0.75rem;" onclick="addCheckItem(${blockIndex})">➕ Ajouter une ligne de contrôle</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    `;
+                } else if (block.type === "note") {
+                    blockContent = `<textarea style="width:100%; min-height:100px; background-color:var(--bg-secondary); border:1px solid var(--border-color); color:#fff; padding:10px; border-radius:4px; margin-top:10px; outline:none;" oninput="updateNoteContent(${blockIndex}, this.value)">${block.content || ''}</textarea>`;
+                }
+
+                blockCard.innerHTML = `
+                    <div class="block-card-header">
+                        <div class="block-card-title">⚙️ ${block.title}</div>
+                        <div class="block-actions">
+                            <button class="btn" style="padding: 2px 8px; font-size:0.75rem;" onclick="deleteBlock(${blockIndex})">Supprimer Bloc</button>
+                        </div>
+                    </div>
+                    ${blockContent}
+                `;
+                container.appendChild(blockCard);
+            });
+        }
+
+        function updateCheckItemName(blockIdx, checkIdx, newName) {
+            activeReport.blocks[blockIdx].checks[checkIdx].item = newName;
+            updateEngineAndGraphics();
+        }
+
+        function addCheckItem(blockIdx) {
+            activeReport.blocks[blockIdx].checks.push({ item: "Nouvel élément de contrôle", status: "OK", comment: "" });
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        function deleteCheckItem(blockIdx, checkIdx) {
+            activeReport.blocks[blockIdx].checks.splice(checkIdx, 1);
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        function updateCheckStatus(blockIdx, checkIdx, value) {
+            activeReport.blocks[blockIdx].checks[checkIdx].status = value;
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        function updateCheckComment(blockIdx, checkIdx, value) { activeReport.blocks[blockIdx].checks[checkIdx].comment = value; }
+        function updateNoteContent(blockIdx, value) { activeReport.blocks[blockIdx].content = value; }
+
+        function addCustomBlock(type) {
+            if (!activeReport) return;
+            if (type === 'Tableau') {
+                activeReport.blocks.push({ title: "Bloc Personnalisé de Contrôle", type: "table", checks: [{ item: "Contrôle manuel", status: "OK", comment: "" }] });
+            } else {
+                activeReport.blocks.push({ title: "Observations & Notes Libres", type: "note", content: "" });
+            }
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        function deleteBlock(index) { activeReport.blocks.splice(index, 1); renderBlocks(); updateEngineAndGraphics(); }
+
+        function initDragAndDrop() {
+            Sortable.create(document.getElementById('blocksArea'), {
+                animation: 150,
+                onEnd: function (evt) {
+                    const movedItem = activeReport.blocks.splice(evt.oldIndex, 1)[0];
+                    activeReport.blocks.splice(evt.newIndex, 0, movedItem);
+                }
+            });
+        }
+
+        // --- MOTEUR DE SYNTHÈSE MATHÉMATIQUE ET CHARTS ---
+        function updateEngineAndGraphics() {
+            if (!activeReport) return;
+
+            let totalChecks = 0, okCount = 0, warnCount = 0, critCount = 0;
+            const anomalies = [];
+
+            activeReport.blocks.forEach(block => {
+                if (block.type === 'table') {
+                    block.checks.forEach(check => {
+                        totalChecks++;
+                        if (check.status === 'OK') okCount++;
+                        else if (check.status === 'WARN') {
+                            warnCount++;
+                            anomalies.push({ item: check.item, level: 'WARN', comment: check.comment || 'Avertissement requis' });
+                        } else if (check.status === 'CRIT') {
+                            critCount++;
+                            anomalies.push({ item: check.item, level: 'CRIT', comment: check.comment || 'Défaut critique !' });
+                        }
+                    });
+                }
+            });
+
+            // Injection automatique de l'anomalie d'espace disque s'il dépasse 85%
+            let pctUsed = activeReport.capacityTotal > 0 ? (activeReport.capacityUsed / activeReport.capacityTotal) * 100 : 0;
+            if (pctUsed >= 90) {
+                critCount++;
+                anomalies.push({ item: "Capacité Stockage Disque", level: "CRIT", comment: `Saturation critique imminente (${Math.round(pctUsed)}%) !` });
+            } else if (pctUsed >= 75) {
+                warnCount++;
+                anomalies.push({ item: "Capacité Stockage Disque", level: "WARN", comment: `Espace disque supérieur au seuil d'alerte (${Math.round(pctUsed)}%).` });
+            }
+
+            let score = totalChecks > 0 ? Math.max(0, 100 - ((warnCount * 12) + (critCount * 35))) : 100;
+            const kpiScoreEl = document.getElementById('kpiScore');
+            const kpiLabelEl = document.getElementById('kpiLabel');
+            kpiScoreEl.innerText = `${Math.round(score)}%`;
+
+            if (score >= 80) { kpiScoreEl.style.borderColor = "var(--accent-green)"; kpiLabelEl.innerText = "Excellent / Conforme"; kpiLabelEl.style.color = "var(--accent-green)"; }
+            else if (score >= 50) { kpiScoreEl.style.borderColor = "var(--accent-orange)"; kpiLabelEl.innerText = "Attention Requise"; kpiLabelEl.style.color = "var(--accent-orange)"; }
+            else { kpiScoreEl.style.borderColor = "var(--accent-red)"; kpiLabelEl.innerText = "Alerte Majeure"; kpiLabelEl.style.color = "var(--accent-red)"; }
+
+            const anomaliesList = document.getElementById('anomaliesList');
+            anomaliesList.innerHTML = anomalies.length === 0 ? `<li style="color: var(--text-muted); font-style: italic;">Aucune anomalie détectée.</li>` : "";
+            anomalies.forEach(ano => {
+                const li = document.createElement('li');
+                li.className = `anomaly-item ${ano.level.toLowerCase()}`;
+                li.innerHTML = `<div><strong>${ano.item}</strong> - ${ano.comment}</div> <span>[${ano.level}]</span>`;
+                anomaliesList.appendChild(li);
+            });
+
+            renderAnomaliesChart(okCount, warnCount, critCount);
+            renderCapacityChart(activeReport.capacityTotal, activeReport.capacityUsed);
+        }
+
+        function renderAnomaliesChart(ok, warn, crit) {
+            const ctx = document.getElementById('chartAnomalies').getContext('2d');
+            if (anomalyChartInstance) anomalyChartInstance.destroy();
+            anomalyChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: ['Conforme', 'Warning', 'Critique'], datasets: [{ data: [ok, warn, crit], backgroundColor: ['#22c55e', '#f97316', '#ef4444'], borderWidth: 1, borderColor: '#1e293b' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#f8fafc', font: { size: 10 } } } } }
+            });
+        }
+
+        function renderCapacityChart(total, used) {
+            const ctx = document.getElementById('chartCapacity').getContext('2d');
+            const libre = Math.max(0, total - used);
+            if (capacityChartInstance) capacityChartInstance.destroy();
+            capacityChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: { labels: ['Utilisé (To)', 'Libre (To)'], datasets: [{ data: [used, libre], backgroundColor: ['#ef4444', '#38bdf8'], borderWidth: 1, borderColor: '#1e293b' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#f8fafc', font: { size: 10 } } } } }
+            });
+        }
+
+        // --- ACTIONS LOGIQUE LOCALES & PERSISTENCE ---
+        function saveActiveReport() {
+            if (!activeReport) return;
+            const transaction = db.transaction([STORE_NAME], "readwrite");
+            const store = transaction.objectStore(STORE_NAME);
+            store.put(activeReport).onsuccess = () => { alert("Rapport enregistré localement !"); loadReportsHistory(); };
+        }
+
+        function loadReportsHistory() {
+            const list = document.getElementById('historyList'); list.innerHTML = "";
+            db.transaction([STORE_NAME], "readonly").objectStore(STORE_NAME).openCursor().onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const rep = cursor.value;
+                    const li = document.createElement('li');
+                    li.className = `history-item ${activeReport && activeReport.id === rep.id ? 'active' : ''}`;
+                    li.onclick = () => loadReportFromDb(rep.id);
+                    li.innerHTML = `<div class="item-header"><span>${rep.constructor}</span><span>${rep.date}</span></div><div class="item-meta">Host: ${rep.host || 'N/A'}</div>`;
+                    list.appendChild(li);
+                    cursor.continue();
+                }
+            };
+        }
+
+        function loadReportFromDb(id) {
+            db.transaction([STORE_NAME], "readonly").objectStore(STORE_NAME).get(id).onsuccess = (e) => {
+                activeReport = e.target.result;
+                document.getElementById('reportTitle').innerText = activeReport.title;
+                document.getElementById('reportWorkspace').style.display = "block";
+                document.getElementById('repDate').value = activeReport.date;
+                document.getElementById('repTech').value = activeReport.tech || "";
+                document.getElementById('repHost').value = activeReport.host || "";
+                document.getElementById('repModel').value = activeReport.model || "";
+                document.getElementById('repSN').value = activeReport.sn || "";
+                document.getElementById('repIP').value = activeReport.ip || "";
+                document.getElementById('repDC').value = activeReport.dc || "";
+                document.getElementById('repFirmware').value = activeReport.firmware || "";
+                
+                renderBlocks();
+                syncCapacityInputs('init');
+                loadReportsHistory();
+            };
+        }
+
+        function clearDatabase() { if (confirm("Vider la base ?")) { db.transaction([STORE_NAME], "readwrite").objectStore(STORE_NAME).clear().onsuccess = () => { activeReport = null; document.getElementById('reportWorkspace').style.display = "none"; loadReportsHistory(); }; } }
+        function exportDataJSON() { if (!activeReport) return; const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(activeReport, null, 2)); const dl = document.createElement('a'); dl.setAttribute("href", dataStr); dl.setAttribute("download", `Report_${activeReport.constructor}.json`); dl.click(); }
+        
+        function importDataJSON(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const imported = JSON.parse(e.target.result);
+                if (imported && imported.blocks) { imported.id = null; activeReport = imported; renderBlocks(); syncCapacityInputs('init'); }
+            };
+            reader.readAsText(file);
+        }
+
+        async function generatePDF() {
+            if (!activeReport) return;
+            const { jsPDF } = window.jspdf; const doc = new jsPDF('p', 'pt', 'a4'); const target = document.getElementById('reportWorkspace');
+            const origBg = target.style.backgroundColor; target.style.backgroundColor = "#ffffff";
+            document.querySelectorAll('.block-actions, .block-toolbar, .btn-inline-del, .capacity-slider-box').forEach(el => el.style.display = 'none');
+
+            await html2canvas(target, { scale: 2, useCORS: true }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                doc.addImage(imgData, 'PNG', 0, 0, 595.28, (canvas.height * 595.28) / canvas.width);
+                doc.save(`Audit_${activeReport.constructor}.pdf`);
+            });
+            target.style.backgroundColor = origBg;
+            document.querySelectorAll('.block-actions, .btn-inline-del').forEach(el => el.style.display = 'flex');
+            document.querySelectorAll('.block-toolbar, .capacity-slider-box').forEach(el => el.style.display = 'block');
+        }
+    </script>
+</body>
+</html>

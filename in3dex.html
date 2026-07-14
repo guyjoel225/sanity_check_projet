@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage Health Check Manager (SHCM)</title>
+    
+    <!-- Intégration des CDN pour un fonctionnement clé en main -->
+    <!-- Chart.js (Graphiques dynamiques) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SortableJS (Drag & Drop des blocs de contrôle) -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <!-- html2canvas & jsPDF (Génération et export PDF propre) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* ==========================================================================
+           1. THÈME & DESIGN SYSTEM (Moderne Dark/Cyberpunk discret & Print-friendly)
+           ========================================================================== */
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #22c55e;
+            --accent-orange: #f97316;
+            --accent-red: #ef4444;
+            --border-color: #475569;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: var(--font-stack);
+            line-height: 1.5;
+            padding-bottom: 50px;
+        }
+
+        header {
+            background-color: var(--bg-secondary);
+            border-bottom: 2px solid var(--border-color);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-area h1 {
+            font-size: 1.5rem;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-area span {
+            font-size: 0.8rem;
+            background: var(--border-color);
+            color: var(--text-main);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .global-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Boutons */
+        .btn {
+            background-color: var(--bg-tertiary);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background-color: var(--border-color);
+            border-color: var(--accent-blue);
+        }
+
+        .btn-primary {
+            background-color: var(--accent-blue);
+            color: #000;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #7dd3fc;
+        }
+
+        .btn-danger {
+            background-color: var(--accent-red);
+            border: none;
+        }
+
+        .btn-danger:hover {
+            background-color: #f87171;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 2rem;
+        }
+
+        /* Sidebar Navigation / Historique */
+        aside {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+            height: fit-content;
+        }
+
+        aside h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            color: var(--accent-blue);
+        }
+
+        .history-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            background-color: var(--bg-primary);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: border-color 0.2s;
+        }
+
+        .history-item:hover, .history-item.active {
+            border-color: var(--accent-blue);
+        }
+
+        .history-item .item-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .history-item .item-meta {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Zone Principale de Travail */
+        main {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* Panneau de sélection de template */
+        .template-selector {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        .template-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-top: 1rem;
+        }
+
+        .template-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .template-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-blue);
+        }
+
+        .template-card h3 {
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .template-card p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Formulaire de rapport actif */
+        .report-workspace {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 2rem;
+            display: none; /* Affiché uniquement si un rapport est actif */
+        }
+
+        .report-header-fields {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+            margin-bottom: 2rem;
+            background-color: var(--bg-primary);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .field-group label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .field-group input, .field-group select, .field-group textarea {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .field-group input:focus, .field-group select:focus {
+            border-color: var(--accent-blue);
+        }
+
+        /* KPI Dashboard interne au rapport */
+        .dashboard-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .kpi-score-card {
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .kpi-score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 8px solid var(--accent-green);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 10px 0;
+        }
+
+        .kpi-charts-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 180px;
+            width: 100%;
+        }
+
+        /* Gestionnaire de Blocs Dynamiques (Form Builder) */
+        .blocks-area {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .block-card {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            position: relative;
+            cursor: grab;
+        }
+
+        .block-card:active {
+            cursor: grabbing;
+        }
+
+        .block-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .block-card-title {
+            font-weight: bold;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .block-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Éléments internes d'un bloc de contrôle */
+        .check-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .check-table th, .check-table td {
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        .check-table th {
+            background-color: var(--bg-secondary);
+        }
+
+        .status-select {
+            padding: 4px;
+            border-radius: 4px;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        .status-select.ok { border-color: var(--accent-green); color: var(--accent-green); }
+        .status-select.warn { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .status-select.crit { border-color: var(--accent-red); color: var(--accent-red); }
+
+        .block-toolbar {
+            background-color: var(--bg-primary);
+            border: 1px dashed var(--border-color);
+            padding: 1rem;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 1.5rem;
+        }
+
+        /* Anomalies & Recommandations */
+        .anomalies-section {
+            margin-top: 2rem;
+            background-color: #271616;
+            border: 1px solid var(--accent-red);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .anomalies-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        /* ==========================================================================
+           2. MEDIAS QUERIES POUR EXPORT IMPRESSION PDF (Moteur d'impression A4)
+           ========================================================================== */
+        @media print {
+            body {
+                background: #fff !important;
+                color: #000 !important;
+                padding: 0;
+            }
+            header, aside, .template-selector, .block-toolbar, .block-actions, .global-actions {
+                display: none !important;
+            }
+            .container {
+                display: block !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .report-workspace {
+                display: block !important;
+                border: none !important;
+                background: #fff !important;
+                padding: 0 !important;
+            }
+            .block-card {
+                page-break-inside: avoid;
+                border: 1px solid #ccc !important;
+                background: #fff !important;
+                color: #000 !important;
+                margin-bottom: 20px;
+            }
+            .field-group input, .field-group select {
+                border: none !important;
+                background: none !important;
+                color: #000 !important;
+                padding: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Principal -->
+    <header>
+        <div class="logo-area">
+            <h1>Storage Health Check Manager (SHCM) <span>v1.0 (PWA Ready)</span></h1>
+        </div>
+        <div class="global-actions">
+            <button class="btn" onclick="exportDataJSON()">📥 Exporter JSON</button>
+            <button class="btn" onclick="document.getElementById('importFile').click()">📤 Importer JSON</button>
+            <input type="file" id="importFile" style="display: none;" onchange="importDataJSON(event)">
+            <button class="btn btn-primary" onclick="generatePDF()">📄 Exporter PDF (Rapport)</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Sidebar : Historique local (IndexedDB) -->
+        <aside>
+            <h2>Historique Local</h2>
+            <ul id="historyList" class="history-list">
+                <!-- Rempli dynamiquement par JS -->
+            </ul>
+            <button class="btn btn-danger" style="margin-top: 1.5rem; width: 100%; justify-content: center;" onclick="clearDatabase()">Réinitialiser DB</button>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main>
+            <!-- Sélecteur de Templates Baies -->
+            <section class="template-selector">
+                <h2>Initialiser un nouveau diagnostic de santé</h2>
+                <div class="template-grid">
+                    <div class="template-card" onclick="initNewReport('PowerStore')">
+                        <h3>Dell PowerStore</h3>
+                        <p>Appliance, CPU, Volumes & Réplication</p>
+                    </div>
+                    <div class="template-card" onclick="initNewReport('PowerScale')">
+                        <h3>Dell PowerScale</h3>
+                        <p>OneFS, Clusters, Pools & FlexProtect</p>
+                    </div>
+                    <div class="template-card" onclick="initNewReport('VMAX')">
+                        <h3>VMAX / PowerMax</h3>
+                        <p>Symmetrix, Directors, Pools & SRDF</p>
+                    </div>
+                    <div class="template-card" onclick="initNewReport('NetApp')">
+                        <h3>NetApp ONTAP</h3>
+                        <p>Nodes, Aggregates, Volumes & SnapMirror</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Espace de travail du Rapport Actif -->
+            <section id="reportWorkspace" class="report-workspace">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h2 id="reportTitle" style="color: var(--accent-blue);">Diagnostic : Dell PowerStore</h2>
+                    <button class="btn btn-primary" onclick="saveActiveReport()">Enregistrer le Rapport</button>
+                </div>
+
+                <!-- 1. Fiche Équipement Générale -->
+                <div class="report-header-fields">
+                    <div class="field-group">
+                        <label>Date du Contrôle</label>
+                        <input type="date" id="repDate">
+                    </div>
+                    <div class="field-group">
+                        <label>Technicien Référent</label>
+                        <input type="text" id="repTech" placeholder="Nom de l'ingénieur">
+                    </div>
+                    <div class="field-group">
+                        <label>Nom de l'Équipement</label>
+                        <input type="text" id="repHost" placeholder="ex: STG-PROD-PSTORE-01">
+                    </div>
+                    <div class="field-group">
+                        <label>Modèle Exact</label>
+                        <input type="text" id="repModel" placeholder="ex: PowerStore 1000T">
+                    </div>
+                    <div class="field-group">
+                        <label>Numéro de Série (S/N)</label>
+                        <input type="text" id="repSN" placeholder="ex: APM002130XXXXX">
+                    </div>
+                    <div class="field-group">
+                        <label>Adresse IP Management</label>
+                        <input type="text" id="repIP" placeholder="10.X.X.X">
+                    </div>
+                    <div class="field-group">
+                        <label>Datacenter / Localisation</label>
+                        <input type="text" id="repDC" placeholder="ex: Paris-DC2 - Salle 3">
+                    </div>
+                    <div class="field-group">
+                        <label>Version Firmware / OS</label>
+                        <input type="text" id="repFirmware" placeholder="ex: OS v3.5.0">
+                    </div>
+                </div>
+
+                <!-- 2. Synthèse & Dashboard Automatique -->
+                <div class="dashboard-row">
+                    <div class="kpi-score-card">
+                        <h3>Score de Santé Global</h3>
+                        <div id="kpiScore" class="kpi-score-circle">100%</div>
+                        <p id="kpiLabel" style="font-weight: bold; color: var(--accent-green);">Excellent</p>
+                    </div>
+                    <div class="kpi-charts-card">
+                        <div>
+                            <h4 style="font-size: 0.8rem; margin-bottom: 5px; text-align: center;">Répartition Anomalies</h4>
+                            <div class="chart-container">
+                                <canvas id="chartAnomalies"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 0.8rem; margin-bottom: 5px; text-align: center;">Capacité Utilisée</h4>
+                            <div class="chart-container">
+                                <canvas id="chartCapacity"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Formulaire Dynamique de Blocs Métriques -->
+                <h3>Points de Contrôle d'Infrastructure</h3>
+                <div id="blocksArea" class="blocks-area">
+                    <!-- Généré dynamiquement selon le template et ordonné par SortableJS -->
+                </div>
+
+                <!-- Boutons d'ajout de blocs personnalisés à la volée -->
+                <div class="block-toolbar">
+                    <button class="btn" onclick="addCustomBlock('Tableau')">➕ Ajouter Tableau</button>
+                    <button class="btn" onclick="addCustomBlock('Note')">➕ Ajouter Note Libre</button>
+                </div>
+
+                <!-- 4. Gestion des Anomalies Automatique -->
+                <div class="anomalies-section">
+                    <h3>⚠️ Liste Automatique des Anomalies Détectées</h3>
+                    <ul id="anomaliesList" class="anomalies-list">
+                        <!-- Généré en direct à partir des sélections "Warning" et "Critical" -->
+                    </ul>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ==========================================================================
+         3. LOGIQUE JAVASCRIPT ES6 (Moteur Core, IndexedDB, Charts & Dom)
+         ========================================================================== -->
+    <script>
+        // --- BASE DE DONNÉES LOCAL (IndexedDB) ---
+        let db;
+        const DB_NAME = "SHCM_Database_v1";
+        const STORE_NAME = "reports";
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onerror = event => reject("Erreur IndexedDB : " + event.target.errorCode);
+                request.onsuccess = event => {
+                    db = event.target.result;
+                    resolve(db);
+                };
+                request.onupgradeneeded = event => {
+                    const dbInstance = event.target.result;
+                    dbInstance.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
+                };
+            });
+        }
+
+        // --- SCHÉMAS ET TEMPLATES DES CONSTRUCTEURS ---
+        const TEMPLATES = {
+            PowerStore: [
+                {
+                    title: "Châssis & Appliance",
+                    type: "table",
+                    checks: [
+                        { item: "Santé Générale Appliance", status: "OK", comment: "LEDs vertes en façade" },
+                        { item: "PowerStoreOS Version", status: "OK", comment: "Dernière release recommandée" }
+                    ]
+                },
+                {
+                    title: "Processeurs & Mémoire",
+                    type: "table",
+                    checks: [
+                        { item: "Controller A (CPU/RAM)", status: "OK", comment: "Charge < 45%" },
+                        { item: "Controller B (CPU/RAM)", status: "OK", comment: "Charge < 45%" }
+                    ]
+                },
+                {
+                    title: "Volumes & Stockage",
+                    type: "table",
+                    checks: [
+                        { item: "Capacité Globale Utile", status: "OK", comment: "Seuil d'alerte configuré à 80%" },
+                        { item: "Provisioning & Thin-Savings", status: "OK", comment: "Taux de déduplication optimal" }
+                    ]
+                }
+            ],
+            PowerScale: [
+                {
+                    title: "Cluster OneFS",
+                    type: "table",
+                    checks: [
+                        { item: "État de santé global OneFS", status: "OK", comment: "Pas d'alerte critique active" },
+                        { item: "Uptime & Sync", status: "OK", comment: "Nœuds synchronisés" }
+                    ]
+                },
+                {
+                    title: "Nœuds de calcul (Isilon)",
+                    type: "table",
+                    checks: [
+                        { item: "Alimentations redondantes", status: "OK", comment: "Toutes les phases OK" },
+                        { item: "Températures internes", status: "OK", comment: "Flux d'air OK" }
+                    ]
+                }
+            ],
+            VMAX: [
+                {
+                    title: "Symmetrix Engine",
+                    type: "table",
+                    checks: [
+                        { item: "Version Microcode", status: "OK", comment: "Conforme matrice éditeur" },
+                        { item: "Directors A/B", status: "OK", comment: "Aucun défaut de bus détecté" }
+                    ]
+                }
+            ],
+            NetApp: [
+                {
+                    title: "Cluster ONTAP",
+                    type: "table",
+                    checks: [
+                        { item: "État du Cluster Interconnect", status: "OK", comment: "LIFs UP" },
+                        { item: "Agrégats RAID-DP / RAID-TEC", status: "OK", comment: "Pas de reconstruction en cours" }
+                    ]
+                }
+            ]
+        };
+
+        let activeReport = null;
+        let anomalyChartInstance = null;
+        let capacityChartInstance = null;
+
+        // --- CYCLE DE VIE DE L'APPLICATION ---
+        window.addEventListener('DOMContentLoaded', async () => {
+            await initDB();
+            loadReportsHistory();
+            initDragAndDrop();
+        });
+
+        // --- INITIALISATION D'UN NOUVEAU RAPPORT ---
+        function initNewReport(constructor) {
+            activeReport = {
+                id: null,
+                constructor: constructor,
+                title: `Diagnostic : Dell ${constructor}`,
+                date: new Date().toISOString().split('T')[0],
+                tech: "",
+                host: "",
+                model: "",
+                sn: "",
+                ip: "",
+                dc: "",
+                firmware: "",
+                blocks: JSON.parse(JSON.stringify(TEMPLATES[constructor] || []))
+            };
+
+            document.getElementById('reportTitle').innerText = `Diagnostic : ${constructor}`;
+            document.getElementById('reportWorkspace').style.display = "block";
+            
+            // Hydrater les champs généraux
+            document.getElementById('repDate').value = activeReport.date;
+            document.getElementById('repTech').value = "";
+            document.getElementById('repHost').value = "";
+            document.getElementById('repModel').value = "";
+            document.getElementById('repSN').value = "";
+            document.getElementById('repIP').value = "";
+            document.getElementById('repDC').value = "";
+            document.getElementById('repFirmware').value = "";
+
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        // --- RENDU DYNAMIQUE DES BLOCS DE CONTRÔLE ---
+        function renderBlocks() {
+            const container = document.getElementById('blocksArea');
+            container.innerHTML = "";
+
+            activeReport.blocks.forEach((block, blockIndex) => {
+                const blockCard = document.createElement('div');
+                blockCard.className = "block-card";
+                blockCard.dataset.index = blockIndex;
+
+                let blockContent = "";
+                if (block.type === "table") {
+                    blockContent = `
+                        <table class="check-table">
+                            <thead>
+                                <tr>
+                                    <th>Élément de Contrôle</th>
+                                    <th style="width: 150px;">Statut</th>
+                                    <th>Commentaires & Remarques terrain</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${block.checks.map((c, cIndex) => `
+                                    <tr>
+                                        <td><strong>${c.item}</strong></td>
+                                        <td>
+                                            <select class="status-select ${c.status.toLowerCase()}" onchange="updateCheckStatus(${blockIndex}, ${cIndex}, this.value)">
+                                                <option value="OK" ${c.status === 'OK' ? 'selected' : ''}>🟢 OK</option>
+                                                <option value="WARN" ${c.status === 'WARN' ? 'selected' : ''}>🟡 Warning</option>
+                                                <option value="CRIT" ${c.status === 'CRIT' ? 'selected' : ''}>🔴 Critical</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="text" class="table-comment-input" value="${c.comment}" oninput="updateCheckComment(${blockIndex}, ${cIndex}, this.value)" style="width:100%; border:none; background:transparent; color:inherit;">
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else if (block.type === "note") {
+                    blockContent = `
+                        <textarea style="width:100%; min-height:100px; background-color:var(--bg-secondary); border:1px solid var(--border-color); color:#fff; padding:10px; border-radius:4px;" oninput="updateNoteContent(${blockIndex}, this.value)">${block.content || ''}</textarea>
+                    `;
+                }
+
+                blockCard.innerHTML = `
+                    <div class="block-card-header">
+                        <div class="block-card-title">⚙️ ${block.title}</div>
+                        <div class="block-actions">
+                            <button class="btn" style="padding: 2px 8px; font-size:0.75rem;" onclick="deleteBlock(${blockIndex})">Supprimer</button>
+                        </div>
+                    </div>
+                    ${blockContent}
+                `;
+                container.appendChild(blockCard);
+            });
+        }
+
+        // --- GESTION DES INTERACTIONS DANS LES BLOCS ---
+        function updateCheckStatus(blockIdx, checkIdx, value) {
+            activeReport.blocks[blockIdx].checks[checkIdx].status = value;
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        function updateCheckComment(blockIdx, checkIdx, value) {
+            activeReport.blocks[blockIdx].checks[checkIdx].comment = value;
+        }
+
+        function updateNoteContent(blockIdx, value) {
+            activeReport.blocks[blockIdx].content = value;
+        }
+
+        function addCustomBlock(type) {
+            if (!activeReport) return;
+            if (type === 'Tableau') {
+                activeReport.blocks.push({
+                    title: "Bloc Personnalisé de Contrôle",
+                    type: "table",
+                    checks: [
+                        { item: "Contrôle manuel 1", status: "OK", comment: "" }
+                    ]
+                });
+            } else {
+                activeReport.blocks.push({
+                    title: "Observations & Notes Libres",
+                    type: "note",
+                    content: ""
+                });
+            }
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        function deleteBlock(index) {
+            activeReport.blocks.splice(index, 1);
+            renderBlocks();
+            updateEngineAndGraphics();
+        }
+
+        // --- INITIALISATION DU DRAG & DROP (SORTABLEJS) ---
+        function initDragAndDrop() {
+            const el = document.getElementById('blocksArea');
+            Sortable.create(el, {
+                animation: 150,
+                onEnd: function (evt) {
+                    // Mettre à jour le tableau JS selon le nouvel index DOM
+                    const movedItem = activeReport.blocks.splice(evt.oldIndex, 1)[0];
+                    activeReport.blocks.splice(evt.newIndex, 0, movedItem);
+                }
+            });
+        }
+
+        // ==========================================================================
+        // MOTEUR DE SCORING, GRAPHIQUES ET DETECTION DES ANOMALIES AUTOMATIQUE
+        // ==========================================================================
+        function updateEngineAndGraphics() {
+            if (!activeReport) return;
+
+            let totalChecks = 0;
+            let penalities = 0;
+            let countOk = 0, countWarn = 0, countCrit = 0;
+            const anomaliesList = [];
+
+            activeReport.blocks.forEach(block => {
+                if (block.type === 'table') {
+                    block.checks.forEach(check => {
+                        totalChecks++;
+                        if (check.status === 'OK') {
+                            countOk++;
+                        } else if (check.status === 'WARN') {
+                            countWarn++;
+                            penalities += 15; // Un Warning fait perdre 15 points
+                            anomaliesList.push({ item: check.item, level: 'Warning', desc: check.comment || 'Performance ou intégrité dégradée' });
+                        } else if (check.status === 'CRIT') {
+                            countCrit++;
+                            penalities += 40; // Un Critical fait perdre 40 points
+                            anomaliesList.push({ item: check.item, level: 'Critical', desc: check.comment || 'Arrêt de service ou dysfonctionnement majeur immédiat' });
+                        }
+                    });
+                }
+            });
+
+            // Calcul du score final sur base 100
+            let score = 100 - penalities;
+            if (score < 0) score = 0;
+            if (totalChecks === 0) score = 100;
+
+            // Rendu visuel du score
+            const scoreCircle = document.getElementById('kpiScore');
+            const scoreLabel = document.getElementById('kpiLabel');
+            scoreCircle.innerText = `${score}%`;
+
+            if (score >= 90) {
+                scoreCircle.style.borderColor = "var(--accent-green)";
+                scoreLabel.innerText = "Excellent / Conforme";
+                scoreLabel.style.color = "var(--accent-green)";
+            } else if (score >= 70) {
+                scoreCircle.style.borderColor = "var(--accent-orange)";
+                scoreLabel.innerText = "Attention / Risques identifiés";
+                scoreLabel.style.color = "var(--accent-orange)";
+            } else {
+                scoreCircle.style.borderColor = "var(--accent-red)";
+                scoreLabel.innerText = "CRITIQUE : Action Requise";
+                scoreLabel.style.color = "var(--accent-red)";
+            }
+
+            // Mise à jour de la liste textuelle des Anomalies
+            const listContainer = document.getElementById('anomaliesList');
+            listContainer.innerHTML = "";
+            if (anomaliesList.length === 0) {
+                listContainer.innerHTML = "<li>✅ Aucune anomalie détectée sur cette baie.</li>";
+            } else {
+                anomaliesList.forEach(anom => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `⚠️ <strong>[${anom.level}]</strong> - ${anom.item} : <em>${anom.desc}</em>`;
+                    listContainer.appendChild(li);
+                });
+            }
+
+            // Génération des graphiques dynamiques Chart.js
+            renderCharts(countOk, countWarn, countCrit);
+        }
+
+        function renderCharts(ok, warn, crit) {
+            // Chart 1: Répartition Anomalies
+            const ctxAnom = document.getElementById('chartAnomalies').getContext('2d');
+            if (anomalyChartInstance) anomalyChartInstance.destroy();
+
+            anomalyChartInstance = new Chart(ctxAnom, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Normal', 'Warning', 'Critical'],
+                    datasets: [{
+                        data: [ok, warn, crit],
+                        backgroundColor: ['#22c55e', '#f97316', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Chart 2: Capacité de stockage fictive (Simulée pour le rapport d'audit)
+            const ctxCap = document.getElementById('chartCapacity').getContext('2d');
+            if (capacityChartInstance) capacityChartInstance.destroy();
+
+            capacityChartInstance = new Chart(ctxCap, {
+                type: 'bar',
+                data: {
+                    labels: ['Capacité'],
+                    datasets: [
+                        { label: 'Utilisé', data: [65], backgroundColor: '#38bdf8' },
+                        { label: 'Libre', data: [35], backgroundColor: '#475569' }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { x: { stacked: true, max: 100 }, y: { stacked: true } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // ==========================================================================
+        // GESTION DU STOCKAGE LOCAL INDEXEDDB & PERSISTANCE
+        // ==========================================================================
+        function saveActiveReport() {
+            if (!activeReport) return;
+
+            // Mettre à jour les métadonnées globales du rapport d'après la saisie utilisateur
+            activeReport.date = document.getElementById('repDate').value;
+            activeReport.tech = document.getElementById('repTech').value;
+            activeReport.host = document.getElementById('repHost').value;
+            activeReport.model = document.getElementById('repModel').value;
+            activeReport.sn = document.getElementById('repSN').value;
+            activeReport.ip = document.getElementById('repIP').value;
+            activeReport.dc = document.getElementById('repDC').value;
+            activeReport.firmware = document.getElementById('repFirmware').value;
+
+            const transaction = db.transaction([STORE_NAME], "readwrite");
+            const store = transaction.objectStore(STORE_NAME);
+            
+            const request = store.put(activeReport);
+            request.onsuccess = (e) => {
+                if (!activeReport.id) {
+                    activeReport.id = e.target.result; // Récupère la clé générée
+                }
+                alert("Rapport enregistré avec succès dans la base IndexedDB !");
+                loadReportsHistory();
+            };
+        }
+
+        function loadReportsHistory() {
+            const transaction = db.transaction([STORE_NAME], "readonly");
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.getAll();
+
+            request.onsuccess = () => {
+                const historyList = document.getElementById('historyList');
+                historyList.innerHTML = "";
+                const list = request.result;
+
+                list.forEach(rep => {
+                    const li = document.createElement('li');
+                    li.className = "history-item";
+                    li.onclick = () => loadReportToWorkspace(rep.id);
+                    li.innerHTML = `
+                        <div class="item-header">
+                            <span>${rep.host || 'Équipement sans nom'}</span>
+                            <span style="color:var(--accent-blue)">${rep.constructor}</span>
+                        </div>
+                        <div class="item-meta">Date: ${rep.date} | Tech: ${rep.tech || 'Inconnu'}</div>
+                    `;
+                    historyList.appendChild(li);
+                });
+            };
+        }
+
+        function loadReportToWorkspace(id) {
+            const transaction = db.transaction([STORE_NAME], "readonly");
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.get(id);
+
+            request.onsuccess = () => {
+                activeReport = request.result;
+                document.getElementById('reportTitle').innerText = `Diagnostic : ${activeReport.constructor}`;
+                document.getElementById('reportWorkspace').style.display = "block";
+
+                document.getElementById('repDate').value = activeReport.date;
+                document.getElementById('repTech').value = activeReport.tech;
+                document.getElementById('repHost').value = activeReport.host;
+                document.getElementById('repModel').value = activeReport.model;
+                document.getElementById('repSN').value = activeReport.sn;
+                document.getElementById('repIP').value = activeReport.ip;
+                document.getElementById('repDC').value = activeReport.dc;
+                document.getElementById('repFirmware').value = activeReport.firmware;
+
+                renderBlocks();
+                updateEngineAndGraphics();
+            };
+        }
+
+        function clearDatabase() {
+            if (confirm("Êtes-vous sûr de vouloir supprimer tous les rapports en cache locale ?")) {
+                const transaction = db.transaction([STORE_NAME], "readwrite");
+                const store = transaction.objectStore(STORE_NAME);
+                store.clear().onsuccess = () => {
+                    alert("Historique local nettoyé.");
+                    document.getElementById('reportWorkspace').style.display = "none";
+                    loadReportsHistory();
+                };
+            }
+        }
+
+        // ==========================================================================
+        // PIPELINE D'EXPORTATION & D'IMPORTATION (JSON & PDF)
+        // ==========================================================================
+        
+        // Export Brut de toute la base locale au format JSON (Sauvegarde externe)
+        function exportDataJSON() {
+            const transaction = db.transaction([STORE_NAME], "readonly");
+            const store = transaction.objectStore(STORE_NAME);
+            store.getAll().onsuccess = (e) => {
+                const dataStr = JSON.stringify(e.target.result, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+                
+                const exportFileDefaultName = 'shcm_reports_backup.json';
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportFileDefaultName);
+                linkElement.click();
+            };
+        }
+
+        // Importation d'un backup JSON externe pour restauration d'environnement
+        function importDataJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    const transaction = db.transaction([STORE_NAME], "readwrite");
+                    const store = transaction.objectStore(STORE_NAME);
+                    
+                    importedData.forEach(rep => {
+                        delete rep.id; // Permet de générer de nouveaux IDs propres dans le cache local
+                        store.put(rep);
+                    });
+
+                    alert("Importation terminée avec succès !");
+                    loadReportsHistory();
+                } catch (err) {
+                    alert("Format de fichier d'import non valide.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Exportation du Diagnostic Actif vers PDF A4 via html2canvas/jsPDF
+        async function generatePDF() {
+            if (!activeReport) {
+                alert("Aucun rapport actif à exporter.");
+                return;
+            }
+            alert("Préparation de l'export PDF... Veuillez patienter quelques secondes pendant la mise en page.");
+            
+            const element = document.getElementById('reportWorkspace');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            
+            // Masquage temporaire des formulaires d'édition pour le rendu PDF
+            const inputs = element.querySelectorAll('input, select, textarea');
+            inputs.forEach(i => i.style.border = 'none');
+
+            await html2canvas(element, { scale: 2 }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const imgWidth = 210; // Largeur A4 mm
+                const pageHeight = 295; // Hauteur A4 mm
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                let heightLeft = imgHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+
+                pdf.save(`Rapport_Audit_${activeReport.constructor}_${activeReport.host || 'Baie'}.pdf`);
+            });
+
+            // Restauration des styles après la capture
+            renderBlocks();
+        }
+    </script>
+</body>
+</html>

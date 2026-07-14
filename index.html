@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage Sanity Check Manager</title>
+    
+    <!-- Chart.js (Chargement CDN pour démo, remplaçable par la version locale dans /libs/ pour le mode 100% hors ligne) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- ========================================== -->
+    <!--            COUCHE STYLES (CSS)             -->
+    <!-- ========================================== -->
+    <style>
+        /* --- VARIABLES GLOBALES & THEMES --- */
+        :root {
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --transition-speed: 0.25s;
+            
+            /* Thème Sombre (Par défaut - Style Grafana / Dell Store) */
+            --bg-primary: #0b0c10;
+            --bg-secondary: #1f2833;
+            --bg-card: #151a22;
+            --text-main: #c5c6c7;
+            --text-bright: #66fcf1;
+            --text-muted: #85929E;
+            --border-color: #45f3ff33;
+            --accent-color: #45f3ff;
+            --accent-hover: #1f8a70;
+            
+            /* Status colors */
+            --color-healthy: #2ecc71;
+            --color-warning: #f1c40f;
+            --color-critical: #e74c3c;
+            --shadow-light: rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="light"] {
+            /* Thème Clair */
+            --bg-primary: #f4f6f9;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --text-main: #2c3e50;
+            --text-bright: #2980b9;
+            --text-muted: #7f8c8d;
+            --border-color: #dcdde1;
+            --accent-color: #2980b9;
+            --accent-hover: #3498db;
+            --shadow-light: rgba(0, 0, 0, 0.08);
+        }
+
+        /* --- STYLES GENERAUX --- */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background-color var(--transition-speed), color var(--transition-speed);
+        }
+
+        /* --- LAYOUT & NAVIGATION (SIDEBAR) --- */
+        aside {
+            width: 260px;
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+            transition: var(--transition-speed);
+        }
+
+        .brand {
+            padding: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--text-bright);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .menu-list {
+            list-style: none;
+            padding: 15px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex-grow: 1;
+        }
+
+        .menu-item {
+            padding: 12px 25px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border-left: 4px solid transparent;
+        }
+
+        .menu-item:hover, .menu-item.active {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-bright);
+            border-left-color: var(--accent-color);
+        }
+
+        [data-theme="light"] .menu-item:hover, [data-theme="light"] .menu-item.active {
+            background-color: rgba(0, 0, 0, 0.03);
+        }
+
+        .theme-toggle-container {
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .btn-theme {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: var(--transition-speed);
+        }
+
+        .btn-theme:hover {
+            border-color: var(--accent-color);
+            color: var(--text-bright);
+        }
+
+        /* --- MAIN CONTENT AREA --- */
+        main {
+            margin-left: 260px;
+            flex-grow: 1;
+            padding: 30px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            max-width: calc(100vw - 260px);
+        }
+
+        .view-section {
+            display: none;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .view-section.active {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        /* --- CARDS & GRID --- */
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px var(--shadow-light);
+            transition: transform var(--transition-speed), box-shadow var(--transition-speed);
+        }
+
+        .card:hover {
+            box-shadow: 0 6px 12px var(--shadow-light);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: var(--text-bright);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* --- KPI DASHBOARD --- */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .kpi-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .kpi-val {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .kpi-label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+        }
+
+        .status-healthy { color: var(--color-healthy); }
+        .status-warning { color: var(--color-warning); }
+        .status-critical { color: var(--color-critical); }
+
+        /* --- GRAPHICS GRID --- */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+
+        /* --- FORMULAIRES & INPUTS --- */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .form-control {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 4px;
+            outline: none;
+            transition: border-color var(--transition-speed);
+        }
+
+        .form-control:focus {
+            border-color: var(--accent-color);
+        }
+
+        /* --- SECTIONS DYNAMIQUES DE RAPPORT --- */
+        .sections-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .report-section {
+            position: relative;
+            cursor: grab;
+            transition: background-color 0.2s;
+        }
+
+        .report-section:active {
+            cursor: grabbing;
+        }
+
+        .section-header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            font-size: 1rem;
+            transition: color 0.2s;
+        }
+
+        .btn-icon:hover {
+            color: var(--text-bright);
+        }
+
+        .btn-danger-icon:hover {
+            color: var(--color-critical);
+        }
+
+        /* --- BOUTONS ET ACTIONS --- */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 10px 18px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all var(--transition-speed);
+        }
+
+        .btn:hover {
+            border-color: var(--accent-color);
+            color: var(--text-bright);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: #111217;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #33ccff;
+            color: #111217;
+        }
+
+        /* --- SYSTEME DE TABLEAU INTERACTIF --- */
+        .table-widget {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .table-widget th, .table-widget td {
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .table-widget th {
+            background-color: rgba(255, 255, 255, 0.02);
+            color: var(--text-bright);
+        }
+
+        /* --- SYSTEME DE CHECKLIST INTERACTIF --- */
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px dashed var(--border-color);
+        }
+
+        /* --- UTILS --- */
+        .hidden { display: none !important; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========================================== -->
+        <!--            FEUILLE DE STYLE IMPRESSION    -->
+        <!-- ========================================== */
+        @media print {
+            body {
+                background: #fff !important;
+                color: #000 !important;
+                display: block;
+            }
+            aside, .btn, .btn-group, .section-header-actions, .theme-toggle-container, .no-print {
+                display: none !important;
+            }
+            main {
+                margin-left: 0 !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+            }
+            .card {
+                box-shadow: none !important;
+                border: 1px solid #ccc !important;
+                background: #fff !important;
+                page-break-inside: avoid;
+                margin-bottom: 20px;
+            }
+            .kpi-card {
+                border: 1px solid #ccc !important;
+            }
+            input, textarea, select {
+                border: none !important;
+                background: transparent !important;
+                color: #000 !important;
+                appearance: none;
+                pointer-events: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ========================================== -->
+    <!--            STRUCTURE HTML (VIEW)           -->
+    <!-- ========================================== -->
+
+    <!-- BARRE LATÉRALE -->
+    <aside class="no-print">
+        <div class="brand">
+            <span>⚡ SANITY CHECK</span>
+        </div>
+        <ul class="menu-list">
+            <li class="menu-item active" onclick="appUI.switchView('dashboard')">📊 Dashboard</li>
+            <li class="menu-item" onclick="appUI.switchView('editor')">✏️ Rapport Courant</li>
+            <li class="menu-item" onclick="appUI.switchView('history')">📜 Historique & Comparatif</li>
+            <li class="menu-item" onclick="appUI.exportJSON()">📥 Exporter Rapport</li>
+            <li class="menu-item" onclick="appUI.triggerImport()">📤 Importer Rapport</li>
+            <li class="menu-item" onclick="window.print()">🖨️ Imprimer</li>
+        </ul>
+        <input type="file" id="file-import" class="hidden" accept=".json" onchange="appUI.importJSON(event)">
+        
+        <div class="theme-toggle-container">
+            <button class="btn-theme" onclick="appUI.toggleTheme()">🌓 Basculer le thème</button>
+        </div>
+    </aside>
+
+    <!-- ZONE PRINCIPALE -->
+    <main>
+
+        <!-- VUE DASHBOARD -->
+        <section id="view-dashboard" class="view-section active">
+            <h2>Tableau de Bord Global</h2>
+            
+            <!-- KPIs -->
+            <div class="kpi-grid">
+                <div class="card kpi-card">
+                    <span class="kpi-label">Score de Santé</span>
+                    <span class="kpi-val status-healthy" id="kpi-score">100%</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">Éléments Sains</span>
+                    <span class="kpi-val status-healthy" id="kpi-healthy">0</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">Warnings</span>
+                    <span class="kpi-val status-warning" id="kpi-warning">0</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">Critiques</span>
+                    <span class="kpi-val status-critical" id="kpi-critical">0</span>
+                </div>
+            </div>
+
+            <!-- GRAPHIQUES -->
+            <div class="charts-grid">
+                <div class="card">
+                    <div class="card-title">État de Santé Global</div>
+                    <div class="chart-container">
+                        <canvas id="chart-health"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Capacité Utilisée vs Libre (Go)</div>
+                    <div class="chart-container">
+                        <canvas id="chart-capacity"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VUE EDITEUR DE RAPPORT -->
+        <section id="view-editor" class="view-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Éditeur de Rapport Sanity Check</h2>
+                <div class="btn-group no-print">
+                    <button class="btn btn-primary" onclick="appUI.addSectionPrompt()">➕ Ajouter Section</button>
+                    <button class="btn" onclick="appUI.clearReport()">🧹 Nouveau Rapport</button>
+                </div>
+            </div>
+
+            <!-- INFORMATIONS GÉNÉRALES -->
+            <div class="card">
+                <div class="card-title">Informations de l'Infrastructure</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Nom de la Baie</label>
+                        <input type="text" class="form-control" id="info-array-name" value="SAN-BAY-01" oninput="appUI.syncMetadata()">
+                    </div>
+                    <div class="form-group">
+                        <label>Constructeur</label>
+                        <input type="text" class="form-control" id="info-vendor" value="Dell EMC" oninput="appUI.syncMetadata()">
+                    </div>
+                    <div class="form-group">
+                        <label>Modèle</label>
+                        <input type="text" class="form-control" id="info-model" value="PowerStore 1000T" oninput="appUI.syncMetadata()">
+                    </div>
+                    <div class="form-group">
+                        <label>Version Firmware</label>
+                        <input type="text" class="form-control" id="info-firmware" value="3.5.0.1" oninput="appUI.syncMetadata()">
+                    </div>
+                    <div class="form-group">
+                        <label>Datacenter</label>
+                        <input type="text" class="form-control" id="info-datacenter" value="DC-Abidjan-1" oninput="appUI.syncMetadata()">
+                    </div>
+                    <div class="form-group">
+                        <label>Technicien</label>
+                        <input type="text" class="form-control" id="info-tech" value="K. Guy Joël" oninput="appUI.syncMetadata()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- EMBRACEMENT DES SECTIONS CONSTRUITES DYNAMIQUEMENT -->
+            <div id="dynamic-sections-container" class="sections-list">
+                <!-- Les widgets de sections apparaîtront ici -->
+            </div>
+        </section>
+
+        <!-- VUE HISTORIQUE & COMPARATIF -->
+        <section id="view-history" class="view-section">
+            <h2>Historique & Analyses Comparatives</h2>
+            <div class="card">
+                <div class="card-title">Comparaison multi-rapports</div>
+                <p style="margin-bottom: 15px; color: var(--text-muted);">
+                    Importez plusieurs fichiers de rapports précédents pour analyser l'évolution de l'infrastructure à travers l'historique de santé.
+                </p>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="appUI.triggerImport()">📥 Charger un rapport historique</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">Évolution Globale de la Santé</div>
+                <div style="position: relative; height: 300px; width: 100%;">
+                    <canvas id="chart-history-evolution"></canvas>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!--            COUCHE LOGIQUE (JAVASCRIPT)     -->
+    <!-- ========================================== -->
+    <script>
+        
+        // --- ETAT GLOBAL DE L'APPLICATION ---
+        const state = {
+            report: {
+                metadata: {
+                    arrayName: "SAN-BAY-01",
+                    vendor: "Dell EMC",
+                    model: "PowerStore 1000T",
+                    firmware: "3.5.0.1",
+                    datacenter: "DC-Abidjan-1",
+                    technician: "K. Guy Joël",
+                    date: new Date().toISOString().split('T')[0]
+                },
+                sections: []
+            },
+            history: [] // Stocke les rapports chargés pour la comparaison
+        };
+
+        // --- ENGIN DE GESTION DES SECTIONS DYNAMIQUES ---
+        const sectionManager = {
+            createSection(type, title = "") {
+                const id = "sec_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+                let content = {};
+
+                // Initialisation des structures selon le type de section
+                switch (type) {
+                    case 'text':
+                        content = { text: "Renseignez vos observations techniques ici..." };
+                        break;
+                    case 'checklist':
+                        content = {
+                            items: [
+                                { label: "Contrôleur A - LED verte", status: "healthy" },
+                                { label: "Contrôleur B - LED verte", status: "healthy" },
+                                { label: "Alimentations redondantes OK", status: "healthy" }
+                            ]
+                        };
+                        break;
+                    case 'table':
+                        content = {
+                            headers: ["Volume", "Statut", "Taille", "I/O Latency"],
+                            rows: [
+                                ["vol_prod_db01", "Healthy", "2 To", "1.2 ms"],
+                                ["vol_prod_app01", "Warning", "500 Go", "8.5 ms"]
+                            ]
+                        };
+                        break;
+                    case 'capacity':
+                        content = { total: 10000, used: 4500 }; // En Go
+                        break;
+                }
+
+                const newSec = { id, type, title: title || `Nouvelle section ${type}`, content };
+                state.report.sections.push(newSec);
+                this.renderSection(newSec);
+                appUI.updateCalculations();
+            },
+
+            renderSection(sec) {
+                const container = document.getElementById('dynamic-sections-container');
+                const secCard = document.createElement('div');
+                secCard.className = "card report-section";
+                secCard.id = sec.id;
+                secCard.draggable = true;
+
+                // Drag and Drop Events
+                secCard.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', sec.id));
+                secCard.ondragover = (e) => e.preventDefault();
+                secCard.ondrop = (e) => {
+                    e.preventDefault();
+                    const originId = e.dataTransfer.getData('text/plain');
+                    if (originId !== sec.id) {
+                        this.reorderSections(originId, sec.id);
+                    }
+                };
+
+                let contentHTML = '';
+                if (sec.type === 'text') {
+                    contentHTML = `<textarea class="form-control" style="width:100%; height:80px;" oninput="sectionManager.updateContent('${sec.id}', {text: this.value})">${sec.content.text || ''}</textarea>`;
+                } else if (sec.type === 'checklist') {
+                    contentHTML = `
+                        <div id="checklist-${sec.id}">
+                            ${sec.content.items.map((item, idx) => `
+                                <div class="checklist-item">
+                                    <input type="checkbox" ${item.status === 'healthy' ? 'checked' : ''} onchange="sectionManager.toggleChecklist('${sec.id}', ${idx}, this.checked)">
+                                    <input type="text" class="form-control" style="border:none; flex-grow:1; background:transparent;" value="${item.label}" oninput="sectionManager.updateChecklistLabel('${sec.id}', ${idx}, this.value)">
+                                    <select class="form-control" onchange="sectionManager.updateChecklistStatus('${sec.id}', ${idx}, this.value)">
+                                        <option value="healthy" ${item.status === 'healthy' ? 'selected' : ''}>Sain</option>
+                                        <option value="warning" ${item.status === 'warning' ? 'selected' : ''}>Warning</option>
+                                        <option value="critical" ${item.status === 'critical' ? 'selected' : ''}>Critique</option>
+                                    </select>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <button class="btn no-print" style="margin-top:10px; padding: 5px 10px; font-size:0.8rem;" onclick="sectionManager.addChecklistItem('${sec.id}')">➕ Ajouter un point de contrôle</button>
+                    `;
+                } else if (sec.type === 'table') {
+                    contentHTML = `
+                        <div style="overflow-x: auto;">
+                            <table class="table-widget">
+                                <thead>
+                                    <tr>
+                                        ${sec.content.headers.map(h => `<th>${h}</th>`).join('')}
+                                        <th class="no-print">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${sec.content.rows.map((row, rIdx) => `
+                                        <tr>
+                                            ${row.map((cell, cIdx) => `
+                                                <td><input type="text" class="form-control" style="border:none; width:100%; background:transparent;" value="${cell}" oninput="sectionManager.updateTableCell('${sec.id}', ${rIdx}, ${cIdx}, this.value)"></td>
+                                            `).join('')}
+                                            <td class="no-print"><button class="btn-icon btn-danger-icon" onclick="sectionManager.deleteTableRow('${sec.id}', ${rIdx})">🗑️</button></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        <button class="btn no-print" style="margin-top:10px; padding: 5px 10px; font-size:0.8rem;" onclick="sectionManager.addTableRow('${sec.id}')">➕ Ajouter Ligne</button>
+                    `;
+                } else if (sec.type === 'capacity') {
+                    contentHTML = `
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Capacité Totale (Go)</label>
+                                <input type="number" class="form-control" value="${sec.content.total}" oninput="sectionManager.updateCapacity('${sec.id}', 'total', this.value)">
+                            </div>
+                            <div class="form-group">
+                                <label>Capacité Utilisée (Go)</label>
+                                <input type="number" class="form-control" value="${sec.content.used}" oninput="sectionManager.updateCapacity('${sec.id}', 'used', this.value)">
+                            </div>
+                        </div>
+                    `;
+                }
+
+                secCard.innerHTML = `
+                    <div class="card-title">
+                        <input type="text" value="${sec.title}" style="background:transparent; border:none; color:var(--text-bright); font-size:1.1rem; font-weight:bold; outline:none;" oninput="sectionManager.renameSection('${sec.id}', this.value)">
+                        <div class="section-header-actions no-print">
+                            <button class="btn-icon" title="Dupliquer" onclick="sectionManager.duplicateSection('${sec.id}')">📋</button>
+                            <button class="btn-icon btn-danger-icon" title="Supprimer" onclick="sectionManager.deleteSection('${sec.id}')">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="section-body">
+                        ${contentHTML}
+                    </div>
+                `;
+                container.appendChild(secCard);
+            },
+
+            renameSection(id, newTitle) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) sec.title = newTitle;
+            },
+
+            updateContent(id, partialContent) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) sec.content = { ...sec.content, ...partialContent };
+            },
+
+            deleteSection(id) {
+                state.report.sections = state.report.sections.filter(s => s.id !== id);
+                document.getElementById(id).remove();
+                appUI.updateCalculations();
+            },
+
+            duplicateSection(id) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) {
+                    const clone = JSON.parse(JSON.stringify(sec));
+                    clone.id = "sec_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+                    clone.title += " (Copie)";
+                    state.report.sections.push(clone);
+                    this.renderSection(clone);
+                    appUI.updateCalculations();
+                }
+            },
+
+            reorderSections(originId, targetId) {
+                const originIdx = state.report.sections.findIndex(s => s.id === originId);
+                const targetIdx = state.report.sections.findIndex(s => s.id === targetId);
+                const [removed] = state.report.sections.splice(originIdx, 1);
+                state.report.sections.splice(targetIdx, 0, removed);
+                
+                // Re-render global
+                document.getElementById('dynamic-sections-container').innerHTML = '';
+                state.report.sections.forEach(s => this.renderSection(s));
+            },
+
+            // Checklist Actions
+            addChecklistItem(id) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) {
+                    sec.content.items.push({ label: "Nouveau point de contrôle", status: "healthy" });
+                    this.refreshSectionDom(sec);
+                }
+            },
+
+            toggleChecklist(id, index, isChecked) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) {
+                    sec.content.items[index].status = isChecked ? "healthy" : "critical";
+                    appUI.updateCalculations();
+                }
+            },
+
+            updateChecklistLabel(id, index, val) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) sec.content.items[index].label = val;
+            },
+
+            updateChecklistStatus(id, index, status) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) {
+                    sec.content.items[index].status = status;
+                    appUI.updateCalculations();
+                }
+            },
+
+            // Table Actions
+            addTableRow(id) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) {
+                    const emptyRow = Array(sec.content.headers.length).fill("-");
+                    sec.content.rows.push(emptyRow);
+                    this.refreshSectionDom(sec);
+                }
+            },
+
+            deleteTableRow(id, rIdx) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) {
+                    sec.content.rows.splice(rIdx, 1);
+                    this.refreshSectionDom(sec);
+                    appUI.updateCalculations();
+                }
+            },
+
+            updateTableCell(id, rIdx, cIdx, val) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) {
+                    sec.content.rows[rIdx][cIdx] = val;
+                    appUI.updateCalculations();
+                }
+            },
+
+            // Capacity Actions
+            updateCapacity(id, key, val) {
+                const sec = state.report.sections.find(s => s.id === id);
+                if (sec) {
+                    sec.content[key] = parseFloat(val) || 0;
+                    appUI.updateCalculations();
+                }
+            },
+
+            refreshSectionDom(sec) {
+                const existingDom = document.getElementById(sec.id);
+                if (existingDom) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.id = sec.id;
+                    this.renderSection(sec);
+                    const newlyRendered = document.getElementById(sec.id);
+                    existingDom.replaceWith(newlyRendered);
+                }
+            }
+        };
+
+        // --- ENGIN GRAPHIQUE (CHART.JS) ---
+        const chartEngine = {
+            instances: {},
+
+            initCharts() {
+                const ctxHealth = document.getElementById('chart-health').getContext('2d');
+                this.instances.health = new Chart(ctxHealth, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Sain', 'Avertissement', 'Critique'],
+                        datasets: [{
+                            data: [0, 0, 0],
+                            backgroundColor: ['#2ecc71', '#f1c40f', '#e74c3c'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+
+                const ctxCapacity = document.getElementById('chart-capacity').getContext('2d');
+                this.instances.capacity = new Chart(ctxCapacity, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Espace Stockage (Go)'],
+                        datasets: [
+                            { label: 'Utilisé', data: [0], backgroundColor: '#e74c3c' },
+                            { label: 'Libre', data: [0], backgroundColor: '#2ecc71' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { x: { stacked: true }, y: { stacked: true } }
+                    }
+                });
+
+                const ctxHistory = document.getElementById('chart-history-evolution').getContext('2d');
+                this.instances.history = new Chart(ctxHistory, {
+                    type: 'line',
+                    data: {
+                        labels: ['Rapport Actuel'],
+                        datasets: [{
+                            label: 'Score de Santé %',
+                            data: [100],
+                            borderColor: '#45f3ff',
+                            backgroundColor: 'rgba(69, 243, 255, 0.1)',
+                            fill: true
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            },
+
+            updateHealthChart(healthy, warning, critical) {
+                if (this.instances.health) {
+                    this.instances.health.data.datasets[0].data = [healthy, warning, critical];
+                    this.instances.health.update();
+                }
+            },
+
+            updateCapacityChart(used, free) {
+                if (this.instances.capacity) {
+                    this.instances.capacity.data.datasets[0].data = [used];
+                    this.instances.capacity.data.datasets[1].data = [free];
+                    this.instances.capacity.update();
+                }
+            },
+
+            updateHistoryChart(labels, scores) {
+                if (this.instances.history) {
+                    this.instances.history.data.labels = labels;
+                    this.instances.history.data.datasets[0].data = scores;
+                    this.instances.history.update();
+                }
+            }
+        };
+
+        // --- INTERFACE UTILISATEUR & SYNCHRONISATION ---
+        const appUI = {
+            init() {
+                chartEngine.initCharts();
+                this.loadDefaultSections();
+                this.updateCalculations();
+            },
+
+            switchView(viewId) {
+                document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+                document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+
+                document.getElementById(`view-${viewId}`).classList.add('active');
+                
+                // Mettre à jour la classe active sur le menu
+                const activeMenu = Array.from(document.querySelectorAll('.menu-item'))
+                    .find(item => item.textContent.toLowerCase().includes(viewId === 'editor' ? 'courant' : viewId));
+                if (activeMenu) activeMenu.classList.add('active');
+            },
+
+            toggleTheme() {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', nextTheme);
+            },
+
+            syncMetadata() {
+                state.report.metadata.arrayName = document.getElementById('info-array-name').value;
+                state.report.metadata.vendor = document.getElementById('info-vendor').value;
+                state.report.metadata.model = document.getElementById('info-model').value;
+                state.report.metadata.firmware = document.getElementById('info-firmware').value;
+                state.report.metadata.datacenter = document.getElementById('info-datacenter').value;
+                state.report.metadata.technician = document.getElementById('info-tech').value;
+            },
+
+            updateCalculations() {
+                let healthy = 0;
+                let warning = 0;
+                let critical = 0;
+                let totalCapacity = 0;
+                let usedCapacity = 0;
+
+                state.report.sections.forEach(sec => {
+                    // Calculs sur checklist
+                    if (sec.type === 'checklist') {
+                        sec.content.items.forEach(item => {
+                            if (item.status === 'healthy') healthy++;
+                            else if (item.status === 'warning') warning++;
+                            else if (item.status === 'critical') critical++;
+                        });
+                    }
+                    // Calculs sur table (détection dynamique de statut simple)
+                    if (sec.type === 'table') {
+                        sec.content.rows.forEach(row => {
+                            row.forEach(cell => {
+                                const c = cell.toLowerCase();
+                                if (c === 'healthy' || c === 'ok') healthy++;
+                                else if (c === 'warning' || c === 'non-optimal') warning++;
+                                else if (c === 'critical' || c === 'ko') critical++;
+                            });
+                        });
+                    }
+                    // Calculs de capacité
+                    if (sec.type === 'capacity') {
+                        totalCapacity += sec.content.total;
+                        usedCapacity += sec.content.used;
+                    }
+                });
+
+                // Formule de score (Simplification : Pourcentage d'éléments sains sur le total de statuts)
+                const totalElements = healthy + warning + critical;
+                let score = 100;
+                if (totalElements > 0) {
+                    score = Math.round((healthy / totalElements) * 100);
+                }
+
+                // Render UI KPIs
+                document.getElementById('kpi-score').textContent = `${score}%`;
+                document.getElementById('kpi-healthy').textContent = healthy;
+                document.getElementById('kpi-warning').textContent = warning;
+                document.getElementById('kpi-critical').textContent = critical;
+
+                // Statut de couleur dynamique pour le score
+                const scoreKpi = document.getElementById('kpi-score');
+                scoreKpi.className = "kpi-val";
+                if (score > 80) scoreKpi.classList.add('status-healthy');
+                else if (score > 50) scoreKpi.classList.add('status-warning');
+                else scoreKpi.classList.add('status-critical');
+
+                // Render Charts
+                chartEngine.updateHealthChart(healthy, warning, critical);
+                chartEngine.updateCapacityChart(usedCapacity, totalCapacity - usedCapacity);
+            },
+
+            addSectionPrompt() {
+                const type = prompt("Choisissez le type de section à insérer ('text', 'checklist', 'table', 'capacity') :", "checklist");
+                if (type && ['text', 'checklist', 'table', 'capacity'].includes(type.trim().toLowerCase())) {
+                    sectionManager.createSection(type.trim().toLowerCase());
+                } else if (type) {
+                    alert("Type de section invalide.");
+                }
+            },
+
+            loadDefaultSections() {
+                document.getElementById('dynamic-sections-container').innerHTML = '';
+                state.report.sections = [];
+                sectionManager.createSection('checklist', 'Statut Matériel (Châssis)');
+                sectionManager.createSection('capacity', 'Volumétrie Logique');
+                sectionManager.createSection('text', 'Commentaires & Recommandations');
+            },
+
+            clearReport() {
+                if (confirm("Voulez-vous réinitialiser le rapport en cours ? Toutes vos modifications non exportées seront perdues.")) {
+                    this.loadDefaultSections();
+                    this.updateCalculations();
+                }
+            },
+
+            // --- IMPORT & EXPORT JSON ---
+            exportJSON() {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.report, null, 2));
+                const downloadAnchor = document.createElement('a');
+                const filename = `rapport_SAN_${state.report.metadata.arrayName}_${state.report.metadata.date}.json`;
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", filename);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+            },
+
+            triggerImport() {
+                document.getElementById('file-import').click();
+            },
+
+            importJSON(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedReport = JSON.parse(e.target.result);
+                        
+                        // Validation élémentaire de schéma JSON
+                        if (importedReport.metadata && Array.isArray(importedReport.sections)) {
+                            state.report = importedReport;
+                            
+                            // Reconstruction UI Métadonnées
+                            document.getElementById('info-array-name').value = state.report.metadata.arrayName || '';
+                            document.getElementById('info-vendor').value = state.report.metadata.vendor || '';
+                            document.getElementById('info-model').value = state.report.metadata.model || '';
+                            document.getElementById('info-firmware').value = state.report.metadata.firmware || '';
+                            document.getElementById('info-datacenter').value = state.report.metadata.datacenter || '';
+                            document.getElementById('info-tech').value = state.report.metadata.technician || '';
+                            
+                            // Reconstruction des sections dynamiques
+                            document.getElementById('dynamic-sections-container').innerHTML = '';
+                            state.report.sections.forEach(sec => sectionManager.renderSection(sec));
+
+                            // Ajouter à l'historique de comparaison
+                            state.history.push(importedReport);
+                            this.updateHistoryAnalysis();
+
+                            this.updateCalculations();
+                            alert("Rapport importé avec succès !");
+                            this.switchView('editor');
+                        } else {
+                            alert("Format JSON non valide pour un rapport Sanity Check.");
+                        }
+                    } catch (err) {
+                        alert("Erreur lors de la lecture du fichier JSON.");
+                    }
+                };
+                reader.readAsText(file);
+            },
+
+            updateHistoryAnalysis() {
+                // Analyse et mise à jour du graphique de tendance d'historique
+                const labels = state.history.map(r => r.metadata.date + " (" + r.metadata.arrayName + ")");
+                const scores = state.history.map(r => {
+                    let healthy = 0, warning = 0, critical = 0;
+                    r.sections.forEach(sec => {
+                        if (sec.type === 'checklist') {
+                            sec.content.items.forEach(item => {
+                                if (item.status === 'healthy') healthy++;
+                                else if (item.status === 'warning') warning++;
+                                else if (item.status === 'critical') critical++;
+                            });
+                        }
+                    });
+                    const total = healthy + warning + critical;
+                    return total > 0 ? Math.round((healthy / total) * 100) : 100;
+                });
+
+                chartEngine.updateHistoryChart(labels, scores);
+            }
+        };
+
+        // --- BOOTSTRAP DE L'APPLICATION ---
+        window.onload = () => {
+            appUI.init();
+        };
+    </script>
+</body>
+</html>
